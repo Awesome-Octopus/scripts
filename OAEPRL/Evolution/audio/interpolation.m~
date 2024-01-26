@@ -1,8 +1,0 @@
-clear all
-
-freq = 500
-x = linspace(0,10,21);
-y = sin(x);
-
-subplot(1
-plot(x,y)
