@@ -1,0 +1,60 @@
+OAEPRL EPR Processing Package
+Ohio Advanced EPR Laboratory
+Rob McCarrick
+OAEPRL EPR Processings Package, Version 1.0
+Last Modified 1/14/2010
+
+Version History:
+1.01 Made corrections to the T1 SRT optimization taking into account the maximum SRT on the ELEXSYS
+1.0 First Verision
+
+Installation:
+This package requires Matlab and the EPR simulation Suite EasySpin, easyspin.org.
+
+To install EasySpin, download and unzip the newest version from easyspin.org.  In Matlab, go to "File/Set Path" menu item.  When this pops up, click the "Add with Subfolders" button and navigate to the location of the easyspin folder that you unzipped and click save to save the created paths.  This allows Matlab to find the EasySpin executable files.  At the commands line, type easyspincompile, select 1 and hit enter.
+
+To install the OAEPRL EPR Procesing Package, unzip the file (http://epr.muohio.edu/OAEPRL-EPR-Processing/OAEPRL-EPR-Processing_1.0.zip).  In Matlab, go to "File/Set Path" menu item.  When this pops up, click the "Add with Subfolders" button and navigate to the location of the OAEPRL folder that you unzipped and click save to save the created paths.
+
+Usage:
+
+For each of these packages, it is useful to create shortcuts in the toolbar of Matlab to speed up the process.  To create shortcuts in the Matlab toolbar, invoke the oaeprlshortcuts function at the command line.
+
+Concentration Determination:
+From the command line, type "concentration" (without quotes).  A file selection window will pop up.  Select the file.  A figure with the CW spectrum will pop up with the approximate concentration 	displayed.  It is necessary for accuracy that the spectra were collected with the following parameters using the HSQE blue CW probe:
+
+		Power: 10 mw (13 dB Att)
+		Modulation Amplitude: 1.0 G
+		Gain: 1x10^5
+		Time Constant: 40 ms
+		Conversion Time: 40 ms
+		Scans: 15
+
+ASCII File Conversion:
+From the command line, type "textconvert" (without quotes).  A file selection window will pop up.  Select the file.  A figure with the spectrum will pop up (with the exception of 2D data).  For spectra collected on a Bruker ELEXSYS intrument, the filename will be automatically generated from the root filename (it's important to stick to filename procedure below).  For data collected on an EMX isntrument, you will be prompted for a filename at the command line.
+
+	For data collected on the ELEXSYS, please use the following file naming conventions:
+		Field Sweeps:  filename_date_FS
+		T2 Determination: filename_date_T2
+		T1 Determination: filename_date_T1
+		DEER: filename_date_DEER
+		2P ESEEM: filename_date_2P
+		3P ESEEM: filename_date_3P"tau value"
+		3P ESEEM vs. tau: filename_date_3Pvau
+		HYSCORE: filename_date_HYSCORE
+		Mims ENDOR: filename_date_MIMS
+		Davies ENDOR: filename_date_DAVIES
+
+Power Saturation Data Processing:
+From the command line, type "powersat" (without quotes).  A file selection window will pop up.  Select the file.  A figure with a power saturation plot will pop up with the value of P1/2.  You will be prompted for a filename and an ASCII file will be created with the power saturation data.
+
+T2 Determination:
+From the command line, type "t2fit" (without quotes).  A file selection window will pop up.  Select the file.  A figure with the spectrum will pop up with a line and label for the T2 value.  An ASCII file will be created.
+
+T1 Determination:
+From the command line, type "t1fit" (without quotes).  A file selection window will pop up.  Select the file.  A figure with the spectrum will pop up with a line and label for the T1 value and the optimum value for the SRT (shot repetition time).  An ASCII file will be created.
+
+2P ESEEM Analysis:
+From the command line, type "ESEEM2pproc" (without quotes).  A file selection window will pop up.  Select the file.  A figure with three frames will pop up.  The top frame is the experimental data and the exponential fit, the middle is the subtracted data and the bottom is the cross termaverage FT.  An ASCII file is written for the time data and for the FT.
+
+3P ESEEM Analysis:
+From the command line, type "ESEEM3pproc" (without quotes).  A file selection window will pop up.  Select the file.  A figure with three frames will pop up.  The top frame is the experimental data and the exponential fit, the middle is the subtracted data and the bottom is the cross termaverage FT.  An ASCII file is written for the time data and for the FT.

@@ -1,0 +1,26 @@
+OAEPRL Data Plotting Package
+Rob McCarrick - Miami University
+Version 1.0
+Last Modified 03/08/2011
+
+Version History:
+1.0 First Version
+
+Installation:
+These scripts are BASH command line scripts designed to run in Linux.  In order for the scripts to run correctly, the following packages must be installed:
+
+Linux with a BASH shell
+gnuplot
+texlive (or any package that provides the "epstopdf" command line tool)
+pdftk
+
+Once these are installed, make sure that the scripts have execution privileges for the desired user.  To call the scripts from the command line without needing the entire path to the script, create a symbolic link in a folder such as /usr/local/bin.
+
+Included scripts:
+deerplot - This script is designed to make figures containing the time, frequency, distance nad l-curve data from the output of the DEERAnalysis package.  To invoke, navigate to the desired folder using a a terminal window and type "deerplot".  The script will loop through and create a ODF fiel for each data set in the directory.
+
+eseemplot - This script creates a figure set including the time, background subtracted and frequency data for 3P ESEEM data created using the OAEPRL 3P ESEEM processing package.  The script will loop over all data sets in a directory and create a PDF for for each set.  To invoke, navigate to the desired folder using a terminal window and type "eseemplot".
+
+3pvtau - This is similar to the above script, but it creates a file with a frequency domain plot for a 3P vs. tau data set.  Each value of tau is on a separate page of a PDF.  The script will loop through all files in a directory.  To invoke, navigate to the desired folder using a terminal window and type "3pvtau".
+
+asciiplot - This script is a general script that will prompt for the title, axes labels and data columns and create a PDF file of the desired data.  To invoke, type "asciiplot" followed by the desired file name and respond to the prompts.

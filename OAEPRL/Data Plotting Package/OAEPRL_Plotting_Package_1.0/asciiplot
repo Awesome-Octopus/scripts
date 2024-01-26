@@ -1,0 +1,32 @@
+#!/bin/bash
+# asciiplot
+# Rob McCarrick - Miami University
+# Version 1.0
+# 03/08/2011
+
+## Creates the gnuplot input file and creates a PDF for the data
+
+export filename=`echo $1 | sed 's/.txt//g'` # Creates a root filename from the dataset
+echo "Enter Title (filename will be appended):" # Label for input request
+read "title" # Prompts for input
+echo "Enter x-axis label" # Label for input request
+read "xlabel" # Prompts for input
+echo "Enter y-axis label" # Label for input request
+read "ylabel" # Prompts for input
+echo "Enter x data column" # Label for input request
+read "xcolumn" # Prompts for input
+echo "Enter y data column" # Label for input request
+read "ycolumn" # Prompts for input
+
+echo 'set terminal postscript eps color size 11,8.5 lw 6 "Arial" 32' > tmp.gnuplot # Generates a temporary gnuplot file
+echo "set output \"$filename.eps\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set nokey' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "set title \"$title $filename\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "set xlabel \"$xlabel\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "set ylabel \"$ylabel\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 1 linecolor rgb "black"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "plot \"$1\" using $xcolumn:$ycolumn with lines ls 1" >> tmp.gnuplot # Generates a temporary gnuplot file
+gnuplot tmp.gnuplot # Executes the gnuplot file
+epstopdf "$filename.eps" # Creates a PDF file from the EPS file
+rm "$filename.eps" # Removes the EPS file
+rm tmp.gnuplot # Removes the gnuplot file

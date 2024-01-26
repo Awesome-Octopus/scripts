@@ -1,0 +1,20 @@
+clear all;
+
+[x y params] = eprload('/home/drrobmcc/Documents/Data/ELEXSYS/Data/Users/McCarrick/Coal_HYSCORE_01-30-09.DTA')
+yreal = real(y)
+yimag = imag(y)
+
+[delay1 ns] = strread(params.FTEzDelay1,'%f %s');
+[delay2 ns] = strread(params.FTEzDelay2,'%f %s');
+[deltax ns] = strread(params.FTEzDeltaX,'%f %s');
+[deltay ns] = strread(params.FTEzDeltaY,'%f %s');
+
+for i = 1:params.YPTS
+    datax = linspace(delay1,delay1+(delay1*deltax),params.XPTS)
+    datayreal = yreal(:,i)
+    datayimag = yimag(:,i)
+    data = datax
+    fname = sprintf('%s.txt',params.TITL);
+    fname = sprintf('%0s.txt',params.TITL)
+    save(fname,'data','-ascii')
+end

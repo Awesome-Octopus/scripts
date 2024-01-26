@@ -1,0 +1,27 @@
+>>> DEER analysis of data set: deer_96_143_trimer_12p5uM_XIII_343905_342905_d2_3800_20130322_189sc <<<
+- Tikhonov regularization with L curve computation -
+
+### Description of data set ###
+Source file:
+D:\DeerAnalysis_2015\tutorial3\deer_96_143_trimer_12p5uM_XIII_343905_342905_d2_3800_20130322_189sc.DTA
+Constant-time DEER. 455 complex data points
+
+### Pre-processing ###
+Time shift: 120 ns
+Cutoff at : 3000 ns
+Phase correction:  18.4°
+Homogeneous 3 dimensional background correction
+Starting at : 296 ns
+r.m.s. error of baseline fit:  0.019733
+Background density:  0.175
+
+Modulation depth:  0.331
+
+### Distance distribution ###
+Number of spins: 1.75
+r.m.s. error of fit:  0.014159
+Range of interest from  1.50 to  8.00 nm
+Mean distance  <r>  3.84 nm
+Std. dev. sigma(r)  0.92 nm
+3rd moment          0.09 nm
+Regularization parameter: 100

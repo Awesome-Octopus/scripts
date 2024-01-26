@@ -1,0 +1,18 @@
+Tikhonov validation for file DEER_T109C_S475C_MTSL_EMCV_afterSEC_New_d214us_298scs_spec
+
+Selected data set:
+
+Density calibrated: 0.057 uncalibrated: 0.009
+Background start:5.474000e+03 ns
+Mod. depth: 0.296
+Dimension: 3.00
+r.m.s.d.: 0.004544
+Constraints: ( 2.00,  4.37) nm
+
+All data sets:
+
+Background start range: (2744.000,8204.000) ns
+Density range: ( 0.057, 0.057)
+Mod. depth range: ( 0.296, 0.296)
+Dimension range: ( 3.00, 3.00)
+Best r.m.s.d.: 0.004544

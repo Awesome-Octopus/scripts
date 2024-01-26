@@ -1,0 +1,18 @@
+Tikhonov validation for file DEER_CiGm_complex_EMCV_native_DtoF_T109_Q235_IAproxyl_spec
+
+Selected data set:
+
+Density calibrated: 0.049 uncalibrated: 0.008
+Background start:2.520000e+03 ns
+Mod. depth: 0.170
+Dimension: 3.00
+r.m.s.d.: 0.001773
+Constraints: ( 1.39,  4.34) nm
+
+All data sets:
+
+Background start range: (840.000,2520.000) ns
+Density range: ( 0.049, 0.049)
+Mod. depth range: ( 0.170, 0.170)
+Dimension range: ( 3.00, 3.00)
+Best r.m.s.d.: 0.001773

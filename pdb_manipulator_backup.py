@@ -8,6 +8,7 @@ Created on Thu Oct 12 01:36:49 2023
 
 # <codecell> Header
 import random
+import os
 import matplotlib as mpl
 from Bio.PDB.PDBParser import PDBParser
 # how we will import the raw text
@@ -18,9 +19,11 @@ import math
 parser = PDBParser(PERMISSIVE=1)
 # permissive=1 allows it to accept incomplete structures without error
 
-structure_id = "mode_7"
-whole_pdb = parser.get_structure("randomized_S2E",
-                                 "/home/andrew/scripts/randomized_S2E/randomized_S2E_0.pdb")
+
+# structure_id = "mode_7"
+# whole_pdb = parser.get_structure("randomized_S2E",
+#                                  "/home/andrew/test-cogrimen/randomized_S2E_0.pdb")
+info_table = []
 
 
 class vector (np.ndarray):
@@ -158,37 +161,6 @@ class vector (np.ndarray):
         return shadow
 
 
-info_table = []
-n = 0
-
-# <codecell> Import atom data
-for model in whole_pdb:
-    for chain in model:
-        for residue in chain:
-            for atom in residue:
-                a_tuple = atom.full_id
-                a_dict = {
-                    'ser_num': n, 'model_name': a_tuple[0],
-                    'submodel': a_tuple[1], 'chain': a_tuple[2],
-                    'res_num': a_tuple[3][1], 'res_name':
-                    residue.get_resname(), 'atom_name': a_tuple[4][0],
-                    'phi': float('nan'), 'psi': float('nan')
-                }
-                # the last 2 are empty fields where phi and psi are assigned
-                info_table.append(a_dict)
-                n = n + 1
-coordinates = np.zeros(shape=(n, 3))
-coordinates = coordinates.view(vector)
-# we are making an numpy array filled with the x y and z for each atom in each
-# row doing it as a fixed array because this is much more memory efficient
-n = 0
-for model in whole_pdb:
-    for chain in model:
-        for residue in chain:
-            for atom in residue:
-                coordinates[n] = atom.get_coord()
-                n = n + 1
-del (a_tuple, n, model, residue, structure_id, chain, atom, a_dict)
 # <codecell> Functions
 
 
@@ -209,8 +181,10 @@ def select(**kwargs):
             info = [s for s in info if s[key] == value]
     for i in info:
         serial_numbers.append(i['ser_num'])
+        serial_numbers = list(set(serial_numbers))
     # return the serial numbers for everything that survived the culling
-    if serial_numbers == []:
+    # convert to a set to eliminate redunancy, then back to a list for indexing
+    if not serial_numbers:
         raise ValueError(
             'Error in select: no atom(s) found that match criteria')
     return serial_numbers
@@ -509,29 +483,36 @@ def set_phi_psi(angle, angle_type='phi', anchor='N', **kwargs):
                 'none is given, phi is default')
 
 
-def write_pdb():
+def write_pdb(outfile=None):
     """
     Output a pdb text file of all currently loaded models with a default
-    filename.
+    filename if none is given
 
     Returns
     -------
     None.
 
     """
+    if outfile is None:
+        model_name = info_table[0]['model_name']
+    else:
+        model_name = outfile
 
     # if the filename is already taken augment the number at the end of the
     # filename
-    model_name = info_table[0]['model_name']
-    count = 0
-    while True:
-        try:
-            #f = open(f'{model_name}_{count}.pdb', 'x')
-            f = open(f'AA-oriented-{count}.pdb', 'x')
-        except:
-            count += 1
-        else:
-            break
+
+    try:
+        f = open(f'{model_name}', 'x')
+    except FileExistsError:
+        count = 0
+        while True:
+            try:
+                f = open(f'{model_name}_{count}', 'x')
+            except FileExistsError:
+                count = count + 1
+            else:
+                break
+
     f.write(
         'MODEL        1                                                 '
         '               \n')
@@ -853,8 +834,8 @@ def orient(center_sn, axis_sn):
         # the atom to be made [0,0,0]
         center = coordinates[center_sn[0]].copy()
         axis_vector = coordinates[axis_sn[0]]  # atom to be set to [0,0,z]
-        print(f'center is: {center}')
-        print(f'axis vector is: {axis_vector}')
+        #print(f'center is: {center}')
+        #print(f'axis vector is: {axis_vector}')
         for n in ser_nums:
             coordinates[n] = coordinates[n] - center
 
@@ -862,31 +843,155 @@ def orient(center_sn, axis_sn):
         x_ax = vector([1, 0, 0])
         y_ax = vector([0, 1, 0])
         z_ax = vector([0, 0, 1])
-        print(f'after recentering, now the axis vector is: {axis_vector}')
+        #print(f'after recentering, now the axis vector is: {axis_vector}')
         xy = axis_vector.project_onto_normal_plane(z_ax)
-        print(f'the vector projected onto the xy plane is: {xy}')
+        #print(f'the vector projected onto the xy plane is: {xy}')
         yz_ang = y_ax.angle_between(xy)
-        print(f'the angle to the yz plane is: {yz_ang}')
+        #print(f'the angle to the yz plane is: {yz_ang}')
 
         # rotate everything around the z axis by that angle
         for n in ser_nums:
+            coordinates[n] = coordinates[n].rotate_arround(yz_ang, z_ax)
 
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # NOTE! for some reason this is rotating opposite the right
-            # hand rule, so angle must be multiplied by -1
-            coordinates[n] = coordinates[n].rotate_arround(-1*yz_ang, z_ax)
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # ~~~~~~~~~~~~~~ IMPORTANT NOTE ~~~~~~~~~~~~~~~~~~~~~~
+        # for some reason, the direction of the axis of rotation must be
+        # reversed for some structures to get the alignment vector to
+        # properly be in the yz plane, so we need to check whether the x
+        # element after rotation is within floating point error of 0,
+        # and rotate in the opposite direction if it is not. that is why
+        # the following code block is needed
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if axis_vector[0] < 0.00001 and axis_vector[0] > -0.00001:
+            pass
+        else:
+            # print('\n~~~~~~ERROR: THIS X COORDINATE OF THE ALIGNMENT VECTOR'
+            #      ' SHOULD NOW BE 0 (within floating point error) BUT IT '
+            #     'ISNT! ~~~~~~~~~~\n\nRetrying by reversing the '
+            #    'direction of rotation ...')
+            for n in ser_nums:
+                coordinates[n] = coordinates[n].rotate_arround(-2*yz_ang, z_ax)
+            if axis_vector[0] < 0.00001 and axis_vector[0] > -0.00001:
+               # print('ERROR RESOLVED: the alignment vector is now: '
+                #      f'{axis_vector}')
+                pass
+            else:
+                # as a last resort (which should never be necessary), try
+                # incremental rotations arround the z axis
+                attempts = 1
+                while axis_vector[0] > 0.00001 and axis_vector[0] < -0.00001 \
+                        and attempts < 51:
+                    for n in ser_nums:
+                        coordinates[n] = coordinates[n].rotate_arround(
+                            0.01, z_ax)
+                if axis_vector[0] > 0.00001 and axis_vector[0] < -0.00001:
+                    raise ValueError
 
-        print(
-            f'after the first rotation the axis vector should be in the yz plane. it is: {axis_vector}')
         # now find angle between desired axis and current + z axis
-        z_ang = axis_vector.angle_between(z_ax)
-        print(f'the angle relative to the +z axis is now: {z_ang}')
         # and rotate everything by that
+        z_ang = axis_vector.angle_between(z_ax)
+        #print(f'the angle relative to the +z axis is now: {z_ang}')
+
         for n, vect in enumerate(coordinates):
 
             if n != center_sn:
                 coordinates[n] = vect.rotate_arround(
                     -1*z_ang, x_ax)
 
-        print(
-            f'the axis should now be along the +z it is: {coordinates[axis_sn]}')
+
+def helix_vector(nterm_res, cterm_res):
+    '''
+
+    Parameters
+    ----------
+    nterm_res : int
+        the residue number of the N-terminal most residue
+        of the helix in question
+    cterm_res : int
+        the residue number of the C-terminal most residue
+        of the helix in question
+
+    Returns
+    -------
+        vector
+        An R3 vector corresponding to the line of best fit along the CA
+        atoms of the helix that indicates the direction the helix is pointing in
+    '''
+    # get ser nums of all alpha carbons in that range
+    c_alpha_ser_nums = select(res_num=(list(range(nterm_res, cterm_res+1))),
+                              atom_name='CA')
+    n_atoms = len(c_alpha_ser_nums)
+    c_alpha_coords = np.zeros(shape=(n_atoms, 3))
+    for n, s in enumerate(c_alpha_ser_nums):
+        c_alpha_coords[n] = coordinates[s]
+
+    # find the mean of the position vectors of the CAs and recenter
+    # them on this
+    mean_coord = np.mean(c_alpha_coords, axis=0).view(np.ndarray)
+    recentered_coords = (c_alpha_coords - mean_coord).view(np.ndarray)
+    # this is mathematically equivalent to principle component analysis
+    cov_matrix = np.cov(recentered_coords, rowvar=False, bias=True)
+    eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
+    max_eigval_ndx = np.argmax(eigenvalues)
+    unit_vector = eigenvectors[:, max_eigval_ndx]
+    #unit_vector /= np.linalg.norm(unit_vector)
+    return unit_vector
+
+# <codecell> Import atom data
+
+# we are making an numpy array filled with the x y and z for each atom in each
+# row doing it as a fixed array because this is much more memory efficient
+
+
+# for w in range(0, 100):
+w = 0
+
+fname = f'randomized_S2E/randomized-S2E-oriented-{w}.pdb'
+outfile_name = f'randomized_S2E/randomized-S2E-oriented-{w}.pdb'
+structure_id = "mode_7"
+whole_pdb = parser.get_structure(outfile_name, fname)
+n = 0
+info_table = []
+for model in whole_pdb:
+    for chain in model:
+        for residue in chain:
+            for atom in residue:
+                a_tuple = atom.full_id
+                a_dict = {
+                    'ser_num': n, 'model_name': a_tuple[0],
+                    'submodel': a_tuple[1], 'chain': a_tuple[2],
+                    'res_num': a_tuple[3][1], 'res_name':
+                    residue.get_resname(), 'atom_name': a_tuple[4][0],
+                    'phi': float('nan'), 'psi': float('nan')
+                }
+                # the last 2 are empty fields where phi & psi are assigned
+
+                info_table.append(a_dict)
+                n = n + 1
+coordinates = np.zeros(shape=(n, 3))
+coordinates = coordinates.view(vector)
+n = 0
+for model in whole_pdb:
+    for chain in model:
+        for residue in chain:
+            for atom in residue:
+                coordinates[n] = atom.get_coord()
+                n = n + 1
+
+del (a_tuple, n, model, residue, structure_id, chain, atom, a_dict)
+#     #print(f'~~~~~~~~~~~~Input file: {fname} ~~~~~~~~~~~~~~')
+#     center = select(res_num=23,	atom_name='CA')
+#     alignment_atom = select(res_num=13, atom_name='CA')
+#     try:
+#        orient(center, alignment_atom)
+#     except ValueError:
+#         print(f'!!!!!!!!!! ERROR: the input pdb file {fname} cannot be '
+#               'properly oriented, and no oriented output structure was'
+#               ' produced. This is likely due to formatting problems. '
+#               'Inspect the input file !!!!!!!!!!!!!')
+#         outfile_name = None
+#     if outfile_name is not None:
+#         #print('structure orientation sucessful. now writing output...')
+#         # write_pdb(outfile_name)
+#         #print(f'{outfile_name} written sucessfully.\n')
+#         pass

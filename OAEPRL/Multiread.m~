@@ -1,0 +1,16 @@
+clear all;
+
+[idx timex timey real imag] = textread('D3-bilayer_06-01-2009_3Pvtau_FT.txt','%f%f%f%f%f','headerlines',2);
+
+numx = 512
+numy = 69
+
+for i = 1:numy
+    datax = timex((i*numx)-(numx-1):i*numx,1:1)
+    datay = timey((i*numx)-(numx-1):i*numx,1:1)
+    datareal = real((i*numx)-(numx-1):i*numx,1:1)
+    dataimag = imag((i*numx)-(numx-1):i*numx,1:1)
+    data = [datax datay datareal dataimag]
+    fname = sprintf('%0iFT.txt',i);
+    save(fname,'data','-ascii')
+end

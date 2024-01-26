@@ -1,0 +1,31 @@
+clear all
+
+for i=1:250
+    Spins.degrees(i,:) = [0,0,1];
+end
+
+Pulse.direction = 'y';
+Pulse.angle = 90;
+Pulse.delay = 0.002;
+
+Spins.degrees = pulse(Spins,Pulse);
+
+Spins.Tone = 0.000219;
+Spins.Ttwo = 0.0000115;
+Spins.offset = linspace(-10000000,20000000,250);
+
+Sim.length = 0.0000005;
+Sim.inc = 0.00000001;
+Sim.delay = 0.05;
+
+Spins.degrees = evolution(Spins,Sim);
+
+Pulse.direction = 'y';
+Pulse.angle = 180;
+Pulse.delay = 0.01;
+
+Spins.degrees = pulse(Spins,Pulse);
+
+Sim.length = 0.0000016;
+
+Spins.degrees = evolution(Spins,Sim);

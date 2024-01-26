@@ -1,0 +1,18 @@
+#!/bin/bash
+if [ -f "header.txt" ];
+then
+cat /dev/null > header.txt
+else
+echo ""
+fi
+echo "%% Power Saturation Analysis Package" >> header.txt
+echo "% Ohio Advanced EPR Laboratory" >> header.txt
+echo "% Rob McCarrick" >> header.txt
+echo "% OAEPRL EPR Processings Package, Version $1" >> header.txt
+echo "% Last Modified $2" >> header.txt
+FILES="*m"
+for f in "$FILES"
+do
+echo "Processing $f file..."
+grep "Version" $f
+done

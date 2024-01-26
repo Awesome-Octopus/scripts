@@ -1,0 +1,96 @@
+function handback=sim_user_model(handles),
+%
+% Simulates distance distribution and dipolar evolution function
+% for the currently selected user model to the 
+% experimental dipolar evolution function
+% G. Jeschke, 2006
+%
+
+set(handles.main_figure,'Pointer','watch');
+
+% Set up vectors of selected fit parameters and their bounds
+
+exflag=get(handles.exci_bandwidth_corr,'Value');
+
+handles.model_mask=zeros(1,6);
+handles.model_mask(1)=get(handles.sel_par1,'Value');
+handles.model_mask(2)=get(handles.sel_par2,'Value');
+handles.model_mask(3)=get(handles.sel_par3,'Value');
+handles.model_mask(4)=get(handles.sel_par4,'Value');
+handles.model_mask(5)=get(handles.sel_par5,'Value');
+handles.model_mask(6)=get(handles.sel_par6,'Value');
+numpar=sum(handles.model_mask);
+start_pars=zeros(1,numpar);
+lower_bounds=zeros(1,numpar);
+upper_bounds=zeros(1,numpar);
+poi=0;
+for k=1:6,
+    if handles.model_mask(k),
+        poi=poi+1;
+        start_pars(poi)=handles.model_pars(k);
+        lower_bounds(poi)=handles.model_lower_bounds(k);
+        upper_bounds(poi)=handles.model_upper_bounds(k);
+    end;
+end;
+
+% Initialize distance axis
+rmin=handles.rmin;
+rmax=handles.rmax;
+rmin=1;
+rmax=40;
+numr=round((rmax-rmin)/0.05)+1;
+r=linspace(rmin,rmax,numr);
+
+% Actual fitting
+[fit_pars,rms]=fminsearch(@rms_user_model,start_pars,[],handles,r,lower_bounds,upper_bounds,exflag);
+
+% Update parameters
+poi=0;
+for k=1:6,
+    if handles.model_mask(k),
+        poi=poi+1;
+        handles.model_pars(k)=fit_pars(poi);
+    end;
+end;
+
+% Update displayed values
+pstr=sprintf('%0.4g',handles.model_pars(1));
+set(handles.par1_edit,'String',pstr);
+set(handles.par1_edit,'ForegroundColor','b');
+pstr=sprintf('%0.4g',handles.model_pars(2));
+set(handles.par2_edit,'String',pstr);
+set(handles.par2_edit,'ForegroundColor','b');
+pstr=sprintf('%0.4g',handles.model_pars(3));
+set(handles.par3_edit,'String',pstr);
+set(handles.par3_edit,'ForegroundColor','b');
+pstr=sprintf('%0.4g',handles.model_pars(4));
+set(handles.par4_edit,'String',pstr);
+set(handles.par4_edit,'ForegroundColor','b');
+pstr=sprintf('%0.4g',handles.model_pars(5));
+set(handles.par5_edit,'String',pstr);
+set(handles.par5_edit,'ForegroundColor','b');
+pstr=sprintf('%0.4g',handles.model_pars(6));
+set(handles.par6_edit,'String',pstr);
+set(handles.par6_edit,'ForegroundColor','b');
+
+% Get distance distribution for fitted parameters
+
+distr=feval(str2func(handles.user_model),r,handles.model_pars);
+
+% Simulate fitted dipolar evolution function
+sc=1;
+if exflag,
+    [sim,sc]=deer_sim(r,distr,handles.A_tdip,handles.A_cluster,handles.bandwidth);
+else,
+    sim=get_td_fit(handles,r,distr);
+end;
+handles.moddepth_suppression=sc;
+handles.A_sim=sim;
+handles.A_r=r;
+handles.mask=ones(size(distr));
+handles.A_distr=distr;
+handles.updated=1;
+
+set(handles.main_figure,'Pointer','arrow');
+
+handback=handles;

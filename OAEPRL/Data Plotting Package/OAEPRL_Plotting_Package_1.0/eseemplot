@@ -1,0 +1,80 @@
+#!/bin/bash
+# ESEEMplot
+# Rob McCarrick - Miami University
+# Version 1.0
+# 03/08/2011
+
+## Creates the gnuplot input file and creates a PDF for the time domain data
+
+for f in *_time.txt # Initiates the for loop to run over all of the time domain files in the directory
+do
+export filetime=`echo $f | sed 's/_time.txt//g'` # Creates a root filename from the dataset
+export name=`echo $f | sed 's/_time.txt/_time/g'` # Creates a filename with _time appended
+echo 'set terminal postscript eps color size 11,8.5 lw 6 "Arial" 32' > tmp.gnuplot # Generates a temporary gnuplot file
+echo "set output \"$name.eps\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set nokey' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "set title 'Time Domain $filetime'" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set xlabel "time (ns)"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 1 linecolor rgb "black"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 2 lt 2 linecolor rgb "red"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "plot \"$f\" using 1:2 with lines ls 1, \"$f\" using 1:3 with lines ls 2" >> tmp.gnuplot # Generates a temporary gnuplot file
+gnuplot tmp.gnuplot # Executes the gnuplot file
+epstopdf "$name.eps" # Creates a PDF file from the EPS file
+rm "$name.eps" # Removes the EPS file
+echo -n " $name.pdf" | cat >> tmp.pdf$filetime # Writes the name of the PDF file to a temp file to be used to combine the data later
+rm tmp.gnuplot # Removes the gnuplot file
+done
+
+## Creates the gnuplot input file and creates a PDF for the time domain data
+
+for f in *_time.txt # Initiates the for loop to run over all of the time domain files in the directory
+do
+export filetime=`echo $f | sed 's/_time.txt//g'` # Creates a root filename from the dataset
+export name=`echo $f | sed 's/_time.txt/_timesub/g'` # Creates a filename with _time appended
+echo 'set terminal postscript eps color size 11,8.5 lw 6 "Arial" 32' > tmp.gnuplot # Generates a temporary gnuplot file
+echo "set output \"$name.eps\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set nokey' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "set title 'Subtracted Time Domain $filetime'" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set xlabel "time (ns)"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 1 linecolor rgb "black"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 2 lt 2 linecolor rgb "red"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "plot \"$f\" using 1:6 with lines ls 1" >> tmp.gnuplot # Generates a temporary gnuplot file
+gnuplot tmp.gnuplot # Executes the gnuplot file
+epstopdf "$name.eps" # Creates a PDF file from the EPS file
+rm "$name.eps" # Removes the EPS file
+echo -n " $name.pdf" | cat >> tmp.pdf$filetime # Writes the name of the PDF file to a temp file to be used to combine the data later
+rm tmp.gnuplot # Removes the gnuplot file
+done
+
+## Creates the gnuplot input file and creates a PDF for the frequency domain data
+
+for f in *_FT.txt # Initiates the for loop to run over all of the frequency domain files in the directory
+do
+export filefreq=`echo $f | sed 's/_FT.txt//g'` # Creates a root filename from the dataset
+export name=`echo $f | sed 's/_FT.txt/_FT/g'` # Creates a filename with _FT appended
+echo 'set terminal postscript eps color size 11,8.5 lw 6 "Arial" 32' > tmp.gnuplot # Generates a temporary gnuplot file
+echo "set output \"$name.eps\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set nokey' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "set title \"Frequency Domain $filefreq\"" >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set xlabel "frequency (MHz)"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set xrange [0:]' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 1 linecolor rgb "black"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo 'set style line 2 lt 2 linecolor rgb "red"' >> tmp.gnuplot # Generates a temporary gnuplot file
+echo "plot \"$f\" using 1:2 with lines ls 1" >> tmp.gnuplot # Generates a temporary gnuplot file
+gnuplot tmp.gnuplot # Executes the gnuplot file
+epstopdf "$name.eps" # Creates a PDF file from the EPS file
+rm "$name.eps" # Removes the EPS file
+echo -n " $name.pdf" | cat >> tmp.pdf$filefreq # Writes the name of the PDF file to a temp file to be used to combine the data later
+rm tmp.gnuplot # Removes the gnuplot file
+done
+
+## Cycles through the temporary PDF files and creates one PDF file for each data set
+
+for f in tmp.pdf* # Initiates a for loop to cycle through the temporary PDF files
+do
+export filename=`echo $f | sed 's/tmp.pdf//g'` # Creates a root filename
+export list=`cat $f` # Creates a variable that is a list of the PDF files for a given dataset
+pdftk $list cat output "$filename.pdf" # Uses pdftk to merge the PDF files
+rm $list # Removes the temporary PDF files
+done
+rm tmp.pdf* # Removes the list temporary files

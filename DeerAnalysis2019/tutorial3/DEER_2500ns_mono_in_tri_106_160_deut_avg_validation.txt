@@ -1,0 +1,18 @@
+Tikhonov validation for file DEER_2500ns_mono_in_tri_106_160_deut_avg
+
+Selected data set:
+
+Density calibrated: 0.937 uncalibrated: 0.145
+Background start:8.680000e+02 ns
+Mod. depth: 0.430
+Dimension: 3.00
+r.m.s.d.: 0.050856
+Constraints: ( 1.38,  4.35) nm
+
+All data sets:
+
+Background start range: (432.000,1304.000) ns
+Density range: ( 0.937, 0.937)
+Mod. depth range: ( 0.430, 0.430)
+Dimension range: ( 3.00, 3.00)
+Best r.m.s.d.: 0.050856

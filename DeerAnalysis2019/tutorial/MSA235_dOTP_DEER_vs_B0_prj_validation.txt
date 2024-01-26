@@ -1,0 +1,16 @@
+Tikhonov validation for file MSA235_dOTP_DEER_vs_B0_prj
+
+Selected data set:
+
+Density calibrated: 0.069 uncalibrated: 0.011
+Mod. depth: 0.226
+Dimension: 3.37
+r.m.s.d.: 0.029989
+Constraints: ( 2.82,  3.44) nm
+
+All data sets:
+
+Density range: ( 0.069, 0.069)
+Mod. depth range: ( 0.226, 0.226)
+Dimension range: ( 3.37, 3.37)
+Best r.m.s.d.: 0.029989

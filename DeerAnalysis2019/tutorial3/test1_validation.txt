@@ -1,0 +1,18 @@
+Tikhonov validation for file test1
+
+Selected data set:
+
+Density calibrated: 0.082 uncalibrated: 0.013
+Background start:1.920000e+03 ns
+Mod. depth: 0.437
+Dimension: 3.00
+r.m.s.d.: 0.002659
+Constraints: ( 1.40,  4.33) nm
+
+All data sets:
+
+Background start range: (1200.000,3600.000) ns
+Density range: ( 0.082, 0.082)
+Mod. depth range: ( 0.437, 0.437)
+Dimension range: ( 3.00, 3.00)
+Best r.m.s.d.: 0.002659
