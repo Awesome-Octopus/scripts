@@ -22,7 +22,6 @@ getpts.sh
 getpts.tcl
 getpts.tcl.save
 gmx_cg_input_splice.sh
-LICENSE
 loop_residues.txt
 make_bb_ndx.sh
 md2deer.tar.gz
