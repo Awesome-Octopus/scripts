@@ -13,7 +13,7 @@ import matplotlib as mpl
 from Bio.PDB.PDBParser import PDBParser
 # how we will import the raw text
 # from Bio.PDB import PDBIO
-
+import copy
 import numpy as np
 import math
 
@@ -1207,7 +1207,7 @@ def import_from_vmd(filename=None):
 
             filename = f'cg-trajectories/S2E-processed-cg-input-{w}.pdb'
             # outfile_name = f'randomized_S2E/randomized-S2E-oriented-{w}.pdb'
-            whole_pdb = parser.get_structure(w, filename)
+            whole_pdb = PDBParser.get_structure(w, filename)
             n = 0
             global info_table
             info_table = []
@@ -1235,42 +1235,65 @@ def import_from_vmd(filename=None):
 
 
 def clone_chain(coordinates, info_table, chain_list=None):
+    '''
 
-    # if no chain was specified, select all chains
+
+    Parameters
+    ----------
+    coordinates : Array of float 64
+        the atomic coordinates of all atoms
+    info_table : list
+        list of dictionaries containing data for each coordinate
+    chain_list : list of strings, optional
+        Which chains should be cloned. If none given all will be selected.
+
+    Returns
+    -------
+    coordinates : Array of float 64
+        the updated atomic coordinates of all atoms after cloning chains.
+    info_table : list
+        the updated list of dictionaries containing data for each coordinate
+        after cloning chains
+    new_chain_list : list
+        list of the chain letters created by this function
+
+    '''
+    # getting started, we need to know what chains we want copied, and which
+    # ones already exist
+    existing_chains = list({entry['chain'] for entry in info_table})
     if chain_list is None:
-        chain_list = list({entry['chain'] for entry in info_table})
-
+        # if no chain was specified, select all chains
+        chain_list = existing_chains
     alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     availible_letters = [
-        letter for letter in alphabet if letter not in chain_list]
-    num_entries = len(coordinates)
-    print(
-        f'starting off there are {len(info_table)} entries in info_table and {num_entries} entries in coordinates')
-    print('the starting ser num  is ',
-          info_table[0]['ser_num'], ' and the ending one is', info_table[-1]['ser_num'])
-    print('The chain list is', chain_list)
-    for n, ch in enumerate(chain_list):
-        print(f'for the {n}th go-through... ')
-        new_chain = min(availible_letters)
-        availible_letters.remove(new_chain)
-        ser_nums = select(info_table, chain=ch)
-        start_ndx = min(ser_nums)
-        end_ndx = max(ser_nums)
-        print(f'our indices start at {start_ndx} and end at {end_ndx}')
-        chainlength = end_ndx - start_ndx + 1
-        temp = coordinates[start_ndx:end_ndx+1]
-        coordinates = np.concatenate((coordinates, temp), axis=0)
-        # copy over info_table information, assign new serial number and
-        # new chain ID
+        letter for letter in alphabet if letter not in existing_chains]
+    new_chain_list = []
+    for chain in chain_list:
 
-        for i, x in enumerate(range(len(info_table), len(coordinates))):
-            to_add = info_table[start_ndx+i]
-            print(to_add['ser_num'])
-            to_add['chain'] = new_chain
-            print(x)
-        print(
-            f'did it work? there are now {len(coordinates)} coordinates and {len(info_table)} entries for them')
-    return coordinates, info_table
+        # assign a new letter for the new chain and remove tha letter from the
+        # list of availible ones
+        new_chain = min(availible_letters)
+        new_chain_list.append(new_chain)
+        availible_letters = [
+            letter for letter in availible_letters if letter is not new_chain]
+        mother_chain_sn = select(info_table, chain=chain)
+        smallest_sn = min(mother_chain_sn)
+        last_ndx = len(info_table)
+        daughter_chain_sn = [x - smallest_sn +
+                             last_ndx for x in mother_chain_sn]
+        # make temp array that is slice of coordinates array where chain is stored
+        # then concetenate the two
+        new_coords = coordinates[mother_chain_sn[0]: mother_chain_sn[-1]+1]
+        coordinates = np.concatenate((coordinates, new_coords)).view(vector)
+        # print(coordinates)
+        # print(info_table[0])
+        info_table.extend(copy.deepcopy(
+            info_table[mother_chain_sn[0]: mother_chain_sn[-1]+1]))
+        for i, sn in enumerate(daughter_chain_sn):
+            info_table[sn]['ser_num'] = sn
+            info_table[sn]['chain'] = new_chain
+
+    return coordinates, info_table, new_chain_list
 
 
 def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0.0, 0.0, 0.0]), rot_axis=vector([0.0, 0.0, 1.0])):
@@ -1300,7 +1323,7 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
     except ZeroDivisionError:
         print('The axis of rotation can not be the zero vector')
 
-    if multiplicity < 2:
+    if multiplicity < 2 or type(multiplicity) is not int:
         print('multiplicity for axial symmetry must be an integer 2 or greater')
         raise ValueError
 
@@ -1312,38 +1335,34 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
             group.append(c)
             try:
                 for x in range(0, (multiplicity - 1)):
-                    group.append(clone_chain(c)[0])
+                    coordinates, info_table, new_chains = clone_chain(
+                        coordinates, info_table, (c)[0])
                 chain_groups.append(group)
             except ValueError:
                 print(
                     f'chain {c} does not exist or can not be copied. skipping.')
         for group in chain_groups:
             for n, chain_id in enumerate(group):
-                print(chain_id)
-                try:
-                    ser_nums = select(info_table, chain=chain_id)
-                    # move the selected atoms by the center of rotation so that
-                    # cofr is [0,0,0]
-                    for ser_num in ser_nums:
-                        # print(f'the current index is {ser_num}')
-                        coordinates[ser_num] = coordinates[ser_num] - cofr
-                        # rotate each atom in the chain arround rot_axis by 2 pi
-                        # divided by the number in the multimer
+                for r in range(multiplicity):
+                    try:
+                        ser_nums = select(info_table, chain=chain_id)
+                        # move the selected atoms by the center of rotation so that
+                        # cofr is [0,0,0]
+                        for ser_num in ser_nums:
+                            coordinates[ser_num] = coordinates[ser_num] - cofr
+                            # rotate each atom in the chain arround rot_axis by 2 pi
+                            # divided by the number in the multimer
 
-                        # for i in range(0, multiplicity):
-                        # print(
-                        #   f'the coordinate we are on is {coordinates[ser_num]}')
-                        # print(
-                        #  f'coordinates[ser_num] is of type {type(coordinates[ser_num])}')
-                        coordinates[ser_num] = coordinates[ser_num].rotate_arround(
-                            2*np.pi / multiplicity * n, rot_axis)
-                        # add back cofr
-                        coordinates[ser_num] = coordinates[ser_num] + cofr
-                except ValueError:
-                    print(f'The chain {chain_id} can not be found')
+                            coordinates[ser_num] = coordinates[ser_num].rotate_arround(
+                                2*np.pi / multiplicity * r, rot_axis)
+                            # add back cofr
+                            coordinates[ser_num] = coordinates[ser_num] + cofr
+                    except ValueError:
+                        print(f'The chain {chain_id} can not be found')
     else:
         print('No chains were provided')
         raise ValueError
+    return coordinates, info_table
 
 ######################## for aligning multiple struture files en batch #######
 #  center = select(info_table, res_num=23,	atom_name='CA')
