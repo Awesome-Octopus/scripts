@@ -1337,28 +1337,20 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
                 for x in range(0, (multiplicity - 1)):
                     coordinates, info_table, new_chains = clone_chain(
                         coordinates, info_table, (c)[0])
+                    group.append(new_chains[0])
                 chain_groups.append(group)
+                print(f'the group is {group}')
             except ValueError:
                 print(
                     f'chain {c} does not exist or can not be copied. skipping.')
         for group in chain_groups:
             for n, chain_id in enumerate(group):
-                for r in range(multiplicity):
-                    try:
-                        ser_nums = select(info_table, chain=chain_id)
-                        # move the selected atoms by the center of rotation so that
-                        # cofr is [0,0,0]
-                        for ser_num in ser_nums:
-                            coordinates[ser_num] = coordinates[ser_num] - cofr
-                            # rotate each atom in the chain arround rot_axis by 2 pi
-                            # divided by the number in the multimer
+                angle = 2*np.pi/multiplicity*n
+                current_chain = select(info_table, chain=chain_id)
+                for sn in current_chain:
+                    coordinates[sn] = coordinates[sn].rotate_arround(
+                        angle, vector([0, 0, 1]))
 
-                            coordinates[ser_num] = coordinates[ser_num].rotate_arround(
-                                2*np.pi / multiplicity * r, rot_axis)
-                            # add back cofr
-                            coordinates[ser_num] = coordinates[ser_num] + cofr
-                    except ValueError:
-                        print(f'The chain {chain_id} can not be found')
     else:
         print('No chains were provided')
         raise ValueError
@@ -1385,4 +1377,4 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
 # axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
 # over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
 
-coordinates, info_table = import_pdb('simple.pdb')
+coordinates, info_table = import_pdb('randomized-S2E-oriented-0.pdb')

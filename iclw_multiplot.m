@@ -73,6 +73,8 @@ for i=1:numel(filenames)
     spectra(i).interpol = griddedInterpolant(spectra(i).x, spectra(i).y);
     spectra(i).xq = linspace(min(spectra(i).x),max(spectra(i).x),10000);
     spectra(i).yq = spectra(i).interpol(spectra(i).xq);
+    %adjust baseline based on first few points (this assumes that your
+    %spectra start with a flat baseline)
     spectra(i).yq = spectra(i).yq - mean(spectra(i).yq(1:100));
     [spectra(i).peaks, spectra(i).field]  ...
         = findpeaks(spectra(i).yq, spectra(i).xq, 'MinPeakDistance', ...
@@ -92,13 +94,13 @@ for i=1:numel(filenames)
     if numel(spectra(i).peaks) >1 && numel(spectra(i).inversepeaks >1)
         spectra(i).centerpeakx = spectra(i).field(2);
         spectra(i).centertroughx = spectra(i).inversefield(2);
-        spectra(i).iclw = 1/(spectra(i).centertroughx - spectra(i).centerpeakx);
+        spectra(i).iclw = 1/abs((spectra(i).centertroughx - spectra(i).centerpeakx));
 
     % otherwise it is the only one
     elseif numel(spectra(i).peaks) < 2 && numel(spectra(i).inversepeaks >1)
         spectra(i).centerpeakx = spectra(i).field(1);
         spectra(i).centertroughx = spectra(i).inversefield(1);
-        spectra(i).iclw = 1/(spectra(i).centertroughx - spectra(i).centerpeakx);
+        spectra(i).iclw = 1/abs((spectra(i).centertroughx - spectra(i).centerpeakx));
 
     else
          warndlg('A spectrum appears to not have an assignable peak, so its width has been set to 1. Go through the code and play with the parameters for the findpeaks function probably.');
