@@ -14,8 +14,11 @@ from Bio.PDB.PDBParser import PDBParser
 # how we will import the raw text
 # from Bio.PDB import PDBIO
 import copy
+import itertools
 import numpy as np
+import multiprocessing
 import math
+from scipy.special import comb
 
 
 class vector (np.ndarray):
@@ -629,6 +632,93 @@ def ramachandran(info_table):
     return mpl.pyplot.scatter(phis, psis)
 
 
+def is_clashing(coordinates, search_set_indices, threshold):
+    '''
+    this will perform distance measurements for all coordinates contained in
+    each of the lists inside search_set_indices against all coordinates in
+    the other sublists (not those in the same sublist). If it encounters a
+    distance less than the threshold, it will stop execution and return the
+    threshold pair of indices.
+
+    Parameters
+    ----------
+    coordinates : array of vectors
+        the entire set of mulecular coordinates
+    search_set_indices : list
+        a list containing at least 2 lists  which each contain the indices of
+        a set of coordinates to checked against all members of all other sets
+        in the top list.
+
+
+    Returns
+    -------
+    results : TYPE
+        DESCRIPTION.
+
+    '''
+
+    # this inner function will divide up the pairwise search by a divide and
+    # conquer multiprocessing algorithm to make it faster. if any of the
+    # subprocesses halt, each is terminated.
+    def parallel_search(ndx_list_a, ndx_list_b, threshold, terminate_event):
+        results = multiprocessing.Queue()
+
+        def pairwise_search():
+            # print('top of pairwise search')
+            for i in range(len(ndx_list_a)):
+                for j in range(len(ndx_list_b)):
+                    # print(
+                    #     f'comparing against the {j} element of the'
+                    #     'second group')
+                    if terminate_event.is_set():
+                        # print('aborting')
+                        # if this or any other subprocess sent term signal
+                        # just abort
+                        return
+                    # print(ndx_list_a[i], ndx_list_b[j])
+                    dist = coordinates[ndx_list_a[i]].distance_between(
+                        coordinates[ndx_list_b[j]])
+                    if dist < threshold:
+                        # print('clash detected')
+                        # Put the result into the queue created by the
+                        # calling function
+                        results.put([ndx_list_a[i], ndx_list_b[j]])
+                        # then set the event variable
+                        # to tell each subprocess to stop
+                        terminate_event.set()
+                        return
+
+        with multiprocessing.Pool() as pool:
+            for i in range(len(ndx_list_a)):
+                # print(
+                #     f'in the {i}th element of the first coord set'
+                #     ' starting async')
+                pool.apply_async(
+                    pairwise_search())
+        pool.close()
+        pool.join()
+        return results
+
+    if threshold is not None:
+
+        terminate_event = multiprocessing.Event()
+
+        # list all possible combinations of coordinate set pairs to be searched
+        # against each other without redundancy
+
+        # for the unique pairs search every element of the first against
+        # every element of the second
+        for pair in itertools.combinations(search_set_indices, 2):
+            # print(pair)
+            halt_indices = parallel_search(pair[0], pair[1], threshold,
+                                           terminate_event)
+            if not halt_indices.empty():
+                return halt_indices.get()
+        # if the function never picks up a distance below the threshold then
+        # return None
+        return None
+
+
 def check_clash_all(coordinates, info_table, cutoff_distance=0.36):
     """
     checks every atom against every other atom not directly bonded to it for
@@ -649,11 +739,12 @@ def check_clash_all(coordinates, info_table, cutoff_distance=0.36):
     pass
 
 
-def check_internal_clash(coordinates, info_table, cutoff_distance=0.36, angle_type='phi', anchor='N', **kwargs):
+def check_internal_clash(coordinates, info_table, cutoff_distance=0.36,
+                         angle_type='phi', anchor='N', **kwargs):
     """
-    Checks if a rotation arround the phi or psi bond (default: phi) of the
+    Check if a rotation arround the phi or psi bond (default: phi) of the
     input residue has resulted in atoms closer than the cutoff radius (in nm)
-    Return any atom serial numbers that clash. To be invoked after performing
+    Return any atom serial numbers that clash. Invoke after performing
     rotation. The cutoff distance is based on 2* the carbon vand der waals
     radius
     """
@@ -667,6 +758,7 @@ def check_internal_clash(coordinates, info_table, cutoff_distance=0.36, angle_ty
 
     # extract the residue number from kwargs, if an atom name was specified
     # remove it
+
     res = kwargs.pop('res_num')
     if 'atom_name' in kwargs.keys():
         kwargs.pop('atom_name')
@@ -689,7 +781,7 @@ def check_internal_clash(coordinates, info_table, cutoff_distance=0.36, angle_ty
 
         # split the chain onto the atoms on one side of the bond and those
         # on the other side
-        n_term_frag = same_chain_atms[0:amide_nitrogen[0]+1]
+        n_term_frag = same_chain_atms[0: amide_nitrogen[0]+1]
         c_term_frag = same_chain_atms[amide_nitrogen[0]+1:]
         try:
             kwargs['atom_name'] = 'HN'
@@ -719,7 +811,7 @@ def check_internal_clash(coordinates, info_table, cutoff_distance=0.36, angle_ty
         kwargs['res_num'] = res + 1
         next_amide_nitro = select(info_table, **kwargs)
         kwargs['res_num'] -= 1
-        n_term_frag = same_chain_atms[0:next_amide_nitro[0]]
+        n_term_frag = same_chain_atms[0: next_amide_nitro[0]]
         c_term_frag = same_chain_atms[next_amide_nitro[0]:]
 
         # remove the amide carbon and oxygen from n terminal side and add to

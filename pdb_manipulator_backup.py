@@ -502,12 +502,12 @@ def write_pdb(outfile=None):
     # filename
 
     try:
-        f = open(f'{model_name}', 'x')
+        f = open(f'{model_name}.pdb', 'x')
     except FileExistsError:
         count = 0
         while True:
             try:
-                f = open(f'{model_name}_{count}', 'x')
+                f = open(f'{model_name}_{count}.pdb', 'x')
             except FileExistsError:
                 count = count + 1
             else:
@@ -834,8 +834,8 @@ def orient(center_sn, axis_sn):
         # the atom to be made [0,0,0]
         center = coordinates[center_sn[0]].copy()
         axis_vector = coordinates[axis_sn[0]]  # atom to be set to [0,0,z]
-        #print(f'center is: {center}')
-        #print(f'axis vector is: {axis_vector}')
+        # print(f'center is: {center}')
+        # print(f'axis vector is: {axis_vector}')
         for n in ser_nums:
             coordinates[n] = coordinates[n] - center
 
@@ -843,11 +843,11 @@ def orient(center_sn, axis_sn):
         x_ax = vector([1, 0, 0])
         y_ax = vector([0, 1, 0])
         z_ax = vector([0, 0, 1])
-        #print(f'after recentering, now the axis vector is: {axis_vector}')
+        # print(f'after recentering, now the axis vector is: {axis_vector}')
         xy = axis_vector.project_onto_normal_plane(z_ax)
-        #print(f'the vector projected onto the xy plane is: {xy}')
+        # print(f'the vector projected onto the xy plane is: {xy}')
         yz_ang = y_ax.angle_between(xy)
-        #print(f'the angle to the yz plane is: {yz_ang}')
+        # print(f'the angle to the yz plane is: {yz_ang}')
 
         # rotate everything around the z axis by that angle
         for n in ser_nums:
@@ -890,7 +890,7 @@ def orient(center_sn, axis_sn):
         # now find angle between desired axis and current + z axis
         # and rotate everything by that
         z_ang = axis_vector.angle_between(z_ax)
-        #print(f'the angle relative to the +z axis is now: {z_ang}')
+        # print(f'the angle relative to the +z axis is now: {z_ang}')
 
         for n, vect in enumerate(coordinates):
 
@@ -934,20 +934,203 @@ def helix_vector(nterm_res, cterm_res):
     eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
     max_eigval_ndx = np.argmax(eigenvalues)
     unit_vector = eigenvectors[:, max_eigval_ndx]
-    #unit_vector /= np.linalg.norm(unit_vector)
+    # unit_vector /= np.linalg.norm(unit_vector)
     return unit_vector
 
-# <codecell> Import atom data
 
-# we are making an numpy array filled with the x y and z for each atom in each
-# row doing it as a fixed array because this is much more memory efficient
+def import_from_vmd(filename=None):
+    if filename is None:
+        pass
+    else:
+        try:
+            w = 1
+
+            filename = f'cg-trajectories/S2E-processed-cg-input-{w}.pdb'
+           # outfile_name = f'randomized_S2E/randomized-S2E-oriented-{w}.pdb'
+            whole_pdb = parser.get_structure(w, filename)
+            n = 0
+            global info_table
+            info_table = []
+            for model in whole_pdb:
+                for chain in model:
+                    for residue in chain:
+                        for atom in residue:
+                            a_tuple = atom.full_id
+                            a_dict = {
+                                'ser_num': n, 'model_name': a_tuple[0],
+                                'submodel': a_tuple[1], 'chain': a_tuple[2],
+                                'res_num': a_tuple[3][1], 'res_name':
+                                residue.get_resname(), 'atom_name': a_tuple[4][0],
+                                'phi': float('nan'), 'psi': float('nan')
+                            }
+                            # the last 2 are empty fields where phi & psi are assigned
+
+                            info_table.append(a_dict)
+                            n = n + 1
+            coordinates = np.zeros(shape=(n, 3))
+            coordinates = coordinates.view(vector)
+
+        except:
+            pass
 
 
-# for w in range(0, 100):
-w = 0
+def clone_chain(chain_list=None):
+    '''
+    duplicates both the chains spatial coordinates and the info_tables
+    and assigns new chain letters to the ones it creates
 
-fname = f'randomized_S2E/randomized-S2E-oriented-{w}.pdb'
-outfile_name = f'randomized_S2E/randomized-S2E-oriented-{w}.pdb'
+    Parameters
+    ----------
+    info_table : list
+        the identifying information for the atom coordinates.
+    coordinates : array
+        spatial coordinates for all atoms.
+    chain_list : list, optional
+        a list of strings indicating which chains duplication should apply to
+         The default is None. which clones all chains
+
+    Returns
+    -------
+    created_chains : list
+        a list containing strings of all new chain identifiers created by this
+        method
+
+    '''
+    global info_table
+    global coordinates
+    chains = []
+    initial_atoms = len(select())
+    final_ndx = initial_atoms - 1
+    ntermini = []
+    ctermini = []
+    # a list of chain ids created by cloning that will be returned
+    created_chains = []
+
+    # if nothing was passed in, select all possible chains
+    if not chain_list:
+        chain_list = list({s['chain'] for s in info_table})
+
+    for x in chain_list:
+        try:
+            s = select(chain=x)
+            ntermini.append(final_ndx + 1)
+            chains.append(x)
+            final_ndx = final_ndx + len(s)
+            ctermini.append(final_ndx)
+        except ValueError:
+            print(
+                f'Chain {x} does not exist. Excluding from selection')
+    # resize the coordinates array so that an identical copy of the selected
+    # chains will fit in
+
+    coordinates = coordinates.copy()
+    coordinates.resize([(final_ndx + 1), 3])
+    alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    if chains:
+        for n, x in enumerate(chains):
+            # NOTE: this assumes all atoms on a chain have contiguous indices
+            # which they always should have.
+            start = min(select(chain=x))
+            end = max(select(chain=x))+1
+            coordinates[ntermini[n]:ctermini[n]+1] = coordinates[start:end]
+
+            # find a letter for the new chain that isn't taken yet
+            available_chains = {letter for letter in alphabet if letter not
+                                in {entry['chain'] for entry in info_table}}
+            z = 0
+            new_chain_id = min(available_chains)
+            # add to list of chain ids created by cloning
+            created_chains.append(new_chain_id)
+            for ndx in range(ntermini[n], ctermini[n]+1):
+                new_entry = info_table[start+z].copy()
+                new_entry['ser_num'] = ndx
+                new_entry['chain'] = new_chain_id
+                info_table.append(new_entry)
+                z = z + 1
+        return created_chains
+
+
+def axial_symmetry(chains, multiplicity, cofr=vector([0.0, 0.0, 0.0]), rot_axis=vector([0.0, 0.0, 1.0])):
+    '''
+
+
+        Parameters
+        ----------
+        chains : LIST
+            list containing strings indicating chains that will be multimerized.
+        multiplicity : INT16
+            positive integer describing how many subunits in the arrangement
+        cofr : VECTOR, optional
+            the center of rotation which the transformation will be applied arround.
+            The default is vector([0.0, 0.0, 0.0]).
+        rot_axis : VECTOR, optional
+            a vector that serves as axis of rotation after recentering on cofr.
+            The default is vector([0.0, 0.0, 1.0]).
+
+        Returns
+        -------
+        None.
+
+        '''
+    try:
+        rot_axis = rot_axis.unitize()
+    except ZeroDivisionError:
+        print('The axis of rotation can not be the zero vector')
+
+    if multiplicity < 2:
+        print('multiplicity for axial symmetry must be an integer 2 or greater')
+        raise ValueError
+    # print(f'the cofr is {cofr}\nthe axis of rotation is {rot_axis}')
+    # a list containing lists of chains which are identical
+    # print(chains)
+    chain_groups = []
+    if chains:
+        for c in chains:
+            group = []
+            group.append(c)
+            try:
+                for x in range(0, (multiplicity - 1)):
+                    group.append(clone_chain(c)[0])
+                chain_groups.append(group)
+                # print(chain_groups)
+            except ValueError:
+                print(
+                    f'chain {c} does not exist or can not be copied. skipping.')
+        for group in chain_groups:
+            for n, chain_id in enumerate(group):
+                # print(chain_id)
+                try:
+                    ser_nums = select(chain=chain_id)
+                    # move the selected atoms by the center of rotation so that
+                    # cofr is [0,0,0]
+                    for ser_num in ser_nums:
+                        # print(f'the current index is {ser_num}')
+                        coordinates[ser_num] = coordinates[ser_num] - cofr
+                        # rotate each atom in the chain arround rot_axis by 2 pi
+                        # divided by the number in the multimer
+
+                        # for i in range(0, multiplicity):
+                        # print(
+                        #   f'the coordinate we are on is {coordinates[ser_num]}')
+                        # print(
+                        #  f'coordinates[ser_num] is of type {type(coordinates[ser_num])}')
+                        coordinates[ser_num] = coordinates[ser_num].rotate_arround(
+                            2*np.pi / multiplicity * n, rot_axis)
+                        # add back cofr
+                        coordinates[ser_num] = coordinates[ser_num] + cofr
+                except ValueError:
+                    print(f'The chain {chain_id} can not be found')
+    else:
+        print('No chains were provided')
+        raise ValueError
+
+
+    # <codecell> Import atom data
+    # we are making an numpy array filled with the x y and z for each atom in each
+    # row doing it as a fixed array because this is much more memory efficient
+    # for w in range(0, 100):
+fname = 'randomized-S2E-oriented-0.pdb'
+outfile_name = 'simple_pentamer.pdb'
 structure_id = "mode_7"
 whole_pdb = parser.get_structure(outfile_name, fname)
 n = 0
@@ -968,6 +1151,7 @@ for model in whole_pdb:
 
                 info_table.append(a_dict)
                 n = n + 1
+coordinates = np.zeros((3, 3))
 coordinates = np.zeros(shape=(n, 3))
 coordinates = coordinates.view(vector)
 n = 0
@@ -978,12 +1162,12 @@ for model in whole_pdb:
                 coordinates[n] = atom.get_coord()
                 n = n + 1
 
-del (a_tuple, n, model, residue, structure_id, chain, atom, a_dict)
-#     #print(f'~~~~~~~~~~~~Input file: {fname} ~~~~~~~~~~~~~~')
-#     center = select(res_num=23,	atom_name='CA')
-#     alignment_atom = select(res_num=13, atom_name='CA')
-#     try:
-#        orient(center, alignment_atom)
+
+######################## for aligning multiple struture files en batch #######
+#  center = select(res_num=23,	atom_name='CA')
+#   alignment_atom = select(res_num=13, atom_name='CA')
+#    try:
+#         orient(center, alignment_atom)
 #     except ValueError:
 #         print(f'!!!!!!!!!! ERROR: the input pdb file {fname} cannot be '
 #               'properly oriented, and no oriented output structure was'
@@ -995,3 +1179,7 @@ del (a_tuple, n, model, residue, structure_id, chain, atom, a_dict)
 #         # write_pdb(outfile_name)
 #         #print(f'{outfile_name} written sucessfully.\n')
 #         pass
+
+
+# axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
+# over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
