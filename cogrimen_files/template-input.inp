@@ -1,0 +1,102 @@
+#############################################################
+## JOB DESCRIPTION                                         ##
+#############################################################
+
+# Basic parameters for IMM1/EEF1 in NAMD
+
+#############################################################
+## ADJUSTABLE PARAMETERS                                   ##
+#############################################################
+
+structure     cg-fixed.psf
+coordinates   cg-fixed.pdb
+
+
+set outputname test
+set temperature 310.15
+
+firsttimestep 0
+
+#############################################################
+## SIMULATION PARAMETERS                                   ##
+#############################################################
+
+# Input
+paraTypeCharmm on
+
+parameters  martini-params/martini-protein-angles.par
+parameters  martini-params/martini-protein-bonds.par
+parameters  martini-params/martini-protein-dihedrals.par  
+parameters  martini-params/martini-all-nonb.par
+
+binaryoutput            no
+binaryrestart           no
+
+
+temperature $temperature
+
+# Implicit Solvent (CGIM)
+CGIM                 on
+CGIMSolventFile      solvpar_martini_COGRIMEN.inp
+CGIMMembrane         on
+CGIMMembraneWidth    60
+#CGIMPower                     10           ;#default 10
+CGIMCutoff                    9          ;#default 9.0
+#CGIMAEMPIR                    0.85         ;#default 0.85
+#CGIMGsolvOut                on           ;#default off
+#CGIMGsolvOutFirstNum 1
+
+#
+# Force-Field Parameters
+exclude      1-2
+cutoff       14.0
+
+switching    on
+switchdist   12.0
+pairlistdist 16.0
+margin 10.0
+
+# Integrator Parameters
+timestep            20.0           ; # 20fs/step
+rigidBonds          none           ;# needed for 2fs steps
+nonbondedFreq       1
+fullElectFrequency  1 
+stepspercycle       20 
+pairlistspercycle   2
+
+# Constant Temperature Control
+langevin            on            ;# do langevin dynamics
+langevinDamping     70           ;# damping coefficient (gamma) of 1/ps
+langevinTemp        $temperature
+langevinHydrogen    off           ;# (off - don't) couple langevin bath to hydrogens
+
+# Output
+outputName $outputname
+
+restartfreq         50000     ;# 500steps = every 1ps
+dcdfreq             50000
+outputEnergies      50000
+
+
+###########################################
+## EXTRA PARAMETERS
+###########################################
+
+#Martini Force Field
+cosAngles                               on
+martiniDielAllow                on
+dielectric                              15.0
+martiniSwitching                on
+PME                                     off
+
+
+#############################################################
+## EXECUTION SCRIPT                                        ##
+#############################################################
+
+# Minimization
+minimize            5000
+reinitvels          $temperature
+
+run      100000000; 
+

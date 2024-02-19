@@ -1,0 +1,653 @@
+!last modified July 20-2011
+27 1
+
+! Generic types:
+
+! STANDARD types, 4:1 mapping
+! polar type
+MASS	1   P5	72.0
+MASS	2   P4	72.0
+MASS 	3   P3 	72.0 
+MASS 	4   P2 	72.0 
+MASS 	5   P1 	72.0 
+! intermediate polar
+MASS 	6   Nda 72.0 
+MASS 	7   Nd 	72.0 
+MASS 	8   Na 	72.0 
+MASS 	9   N0 	72.0
+! apolar
+MASS 	10  C5 	72.0 
+MASS 	11  C4 	72.0 
+MASS 	12  C3C 72.0 ! cis
+MASS 	13  C3T 72.0 ! trans
+MASS 	14  C2 	72.0
+MASS 	15  C1 	72.0
+! charged
+MASS 	16  Qda 72.0
+MASS 	17  Qd 	72.0
+MASS 	18  Qa 	72.0 
+MASS 	19  Q0 	72.0 
+
+! RING types, 2-3:1 mapping
+! beads in ring structures have mass = 45 amu, not 72 
+MASS 	20  SP1 45.0 
+MASS 	21  SP2 45.0 
+MASS 	22  SP3 45.0 
+MASS 	23  SP4 45.0 
+MASS 	24  SP5 45.0 
+MASS 	25  SNd 45.0 
+MASS 	26  SNa 45.0 
+MASS 	27  SNda 45.0
+MASS 	28  SN0 45.0  
+MASS 	29  SC5 45.0 
+MASS 	30  SC4 45.0 
+MASS 	31  SC3 45.0
+MASS 	32  SC2 45.0
+MASS 	33  SC1 45.0
+MASS 	34  SQda 45.0
+MASS 	35  SQd 45.0
+MASS 	36  SQa 45.0
+MASS 	37  SQ0 45.0
+! BIG particle type (to prevent freezing of water)
+MASS 	38  BP4 72.0
+
+
+! amino acid side chain particles
+MASS 	39  N0r  72.0 ! ARG
+MASS 	40  Qdr  72.0 ! ARG
+MASS    41  P4r  72.0 ! neutral ARG
+MASS	42  P5n	 72.0 ! ASN
+MASS 	43  Qad  72.0 ! ASP
+MASS    44  P3d  72.0 ! neutral ASP
+MASS 	45  C5c  72.0 ! CYS
+MASS	46  P4q	 72.0 ! GLN
+MASS 	47  Qae  72.0 ! GLU
+MASS    48  P1e  72.0 ! neutral GLU
+MASS 	49  SC4h 45.0 ! HSE/HSD
+MASS 	50  SP1h 45.0 ! HSE/HSD
+MASS 	51  SQdh 45.0 ! HSP
+MASS 	52  AC1i 72.0 ! ILE
+MASS 	53  AC1l 72.0 ! LEU
+MASS 	54  C3k  72.0 ! LYS
+MASS 	55  Qdk  72.0 ! LYS
+MASS    56  P1k  72.0 ! neutral LYS
+MASS 	57  C5m  72.0 ! MET
+MASS 	58  SC4f 45.0 ! PHE
+MASS 	59  AC2p 72.0 ! PRO
+MASS 	60  P1s  72.0 ! SER
+MASS 	61  P1t  72.0 ! THR
+MASS 	62  SC4w 45.0 ! TRP
+MASS 	63  SP1w 45.0 ! TRP
+MASS 	64  SC4y 45.0 ! TYR
+MASS 	65  SP1y 45.0 ! TYR
+MASS 	66  AC2v 72.0 ! VAL
+
+!backbone types
+MASS	67  P5C  72.0 ! coil (coil = C in DSSP)
+MASS	68  P4C  72.0 ! coil
+MASS 	69  NaC  72.0 ! coil
+MASS 	70  P5B  72.0 ! bend (bend = B in DSSP)
+MASS	71  P4B  72.0 ! bend
+MASS	72  NaB  72.0 ! bend
+MASS	73  P5F  72.0 ! free (free = isolated amino acid, not bonded to anything)
+MASS	74  P4F  72.0 ! free
+MASS	75  NaF  72.0 ! free
+MASS	76  N0H  72.0 ! helix (helix = H,I,G in DSSP)
+MASS	77  C5H  72.0 ! helix
+MASS	78  NdH  72.0 ! helix
+MASS	79  NaH  72.0 ! helix
+MASS	80  NdaT 72.0 ! turn (turn = T in DSSP)
+MASS	81  N0T  72.0 ! turn
+MASS	82  NdaE 72.0 ! extended/beta (extended = E in DSSP)
+MASS	83  N0E  72.0 ! extended/beta
+!the angle terms are different when there is a proline in a helix
+!so need separate bead types for proline when it is in a helix
+MASS	84  C5Hp 72.0 ! proline in helix
+MASS	85  N0Hp 72.0 ! proline in helix
+MASS	86  NaHp 72.0 ! proline in helix
+
+!beads for charged NTER/CTER termini
+MASS    87  QdC  72.0 ! NTER coil
+MASS    88  QdB  72.0 ! NTER bend
+MASS    89  QdH  72.0 ! NTER helix
+MASS    90  QdHp 72.0 ! NTER helix proline
+MASS    91  QdT  72.0 ! NTER turn
+MASS    92  QdEX 72.0 ! NTER extended
+MASS    93  QaC  72.0 ! CTER coil
+MASS    94  QaB  72.0 ! CTER bend
+MASS    95  QaH  72.0 ! CTER helix
+MASS    96  QaHp 72.0 ! CTER helix proline
+MASS    97  QaT  72.0 ! CTER turn
+MASS    98  QaEX 72.0 ! CTER extended
+!beads for uncharged ACE/CT3 termini (not already defined above)
+MASS    99   NaT  72.0 ! ACE turn
+MASS    100  NaEX 72.0 ! ACE extended
+MASS    101  P3C  72.0 ! CT3 coil
+MASS    102  P3B  72.0 ! CT3 bend
+MASS    103  P3T  72.0 ! CT3 turn
+MASS    104  P3EX 72.0 ! CT3 extended
+MASS    105  P3H  72.0 ! CT3 helix
+MASS    106  P3Hp 72.0 ! CT3 helix proline 
+
+!small carbon chain beads
+!potentially useful for molecules with long carbon chains containing many double bonds
+!currently used for carotenoids
+MASS	107  RC3C 45.0 ! small C3C (cis)
+MASS	108  RC3T 45.0 ! small C3T (trans)
+MASS	109  RC1  45.0 ! small C1
+
+!special beads to accomodate lipid parameters
+MASS    110  QaL  72.0 ! Qa for lipids 
+MASS    111  NaL  72.0 ! Na for lipids 
+
+
+
+
+
+
+
+! amino acids
+
+RESI ALA          0.00  !
+ATOM BAS   P4     0.00  !    |
+BOND  BAS +BAS          !   BAS
+ANGLE -BAS BAS +BAS     !    |
+DIHE -BAS BAS +BAS #BAS !
+
+RESI ARG           1.00 !
+ATOM BAS   P5      0.00 !    |
+ATOM SI1   N0r     0.00 !   BAS-SI1-SI2
+ATOM SI2   Qdr     1.00 !    |
+BOND  BAS SI1  SI1 SI2  !
+BOND  BAS +BAS          !
+ANGLE BAS SI1 SI2       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI ARG0         0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SI1   N0r    0.00  !   BAS-SI1-SI2
+ATOM SI2   P4r    0.00  !    |
+BOND BAS SI1  SI1 SI2   !
+BOND BAS +BAS           !
+ANGLE BAS SI1 SI2       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI ASN           0.00 !
+ATOM BAS   P5      0.00 !    |
+ATOM SID   P5n     0.00 !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI ASP          -1.00 !
+ATOM BAS   P5      0.00 !    |
+ATOM SID   Qad    -1.00 !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI ASP0         0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SID   P3d    0.00  !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      ! 
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI CYS           0.00 !
+ATOM BAS   P5      0.00 !    |
+ATOM SID   C5c     0.00 !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI GLN          0.00  !
+ATOM BAS  P5      0.00  !    |
+ATOM SID  P4q     0.00  !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI GLU          -1.00 !
+ATOM BAS   P5      0.00 !    |
+ATOM SID   Qae    -1.00 !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI GLU0         0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SID   P1e    0.00  !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI GLY          0.00  !
+ATOM BAS   P5     0.00  !    |
+BOND  BAS +BAS          !   BAS
+ANGLE -BAS BAS +BAS     !    |
+DIHE -BAS BAS +BAS #BAS !
+
+RESI HSD          0.00  ! neutral HIS, proton on ND1
+ATOM BAS   P5     0.00  !            - SI2
+ATOM SI1   SC4h   0.00  !    |     /   |
+ATOM SI2   SP1h   0.00  !   BAS-SI1    |
+ATOM SI3   SP1h   0.00  !    |     \   |
+BOND  BAS SI1           !            - SI3
+BOND  SI1 SI2  SI1 SI3  SI2 SI3  !these should be constraints  
+BOND  BAS +BAS          !
+ANGLE BAS SI1 SI2       !
+ANGLE BAS SI1 SI3       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+!other possible ring angles that are not defined in Martini
+!these angles should NOT be used
+!one should take care to specify "auto none" in psfgen so that it does not automatically generate them
+!the definitions are left here (commented out) as a reminder
+!ANGLE SI1 SI2 SI3 ! 60
+!ANGLE SI2 SI3 SI1 ! 60
+!ANGLE SI3 SI1 SI2 ! 60
+IMPR BAS SI2 SI3 SI1    !
+DIHE -BAS BAS +BAS #BAS !
+
+!HSD and HSE are exactly the same in Martini, but we define both to match the all-atom pdb
+RESI HSE          0.00  ! neutral HIS, proton on NE1
+ATOM BAS   P5     0.00  !            - SI2
+ATOM SI1   SC4h   0.00  !    |     /   |
+ATOM SI2   SP1h   0.00  !   BAS-SI1    |
+ATOM SI3   SP1h   0.00  !    |     \   |
+BOND  BAS SI1           !            - SI3
+BOND  SI1 SI2  SI1 SI3  SI2 SI3  !these should be constraints  
+BOND  BAS +BAS          !
+ANGLE BAS SI1 SI2       !
+ANGLE BAS SI1 SI3       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+IMPR BAS SI2 SI3 SI1    !
+DIHE -BAS BAS +BAS #BAS !
+
+!HSP protonated HIS
+RESI HSP          1.00  ! protonated HIS
+ATOM BAS   P5     0.00  !            - SI2
+ATOM SI1   SC4h   0.00  !    |     /   |
+ATOM SI2   SQdh   0.50  !   BAS-SI1    |
+ATOM SI3   SQdh   0.50  !    |     \   |
+BOND  BAS SI1           !            - SI3
+BOND  SI1 SI2  SI1 SI3  SI2 SI3  !these should be constraints  
+BOND  BAS +BAS          !
+ANGLE BAS SI1 SI2       !
+ANGLE BAS SI1 SI3       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+!other possible ring angles that are not defined in Martini
+!these angles should NOT be used
+!one should take care to specify "auto none" in psfgen so that it does not automatically generate them
+!the definitions are left here (commented out) as a reminder
+!ANGLE SI1 SI2 SI3 ! 60
+!ANGLE SI2 SI3 SI1 ! 60
+!ANGLE SI3 SI1 SI2 ! 60
+IMPR BAS SI2 SI3 SI1    !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI ILE          0.00  !    |
+ATOM BAS   P5     0.00  !   BAS-SID
+ATOM SID   AC1i   0.00  !    |
+BOND  BAS SID !this should be a constraint
+BOND  BAS +BAS          !
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI LEU          0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SID   AC1l   0.00  !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI LYS          1.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SI1   C3k    0.00  !   BAS-SI1-SI2
+ATOM SI2   Qdk    1.00  !    |
+BOND  BAS SI1  SI1 SI2  !
+BOND  BAS +BAS          !
+ANGLE BAS SI1 SI2       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI LYS0         0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SI1   C3k    0.00  !   BAS-SI1-SI2
+ATOM SI2   P1k    0.00  !    |
+BOND  BAS SI1  SI1 SI2  !
+BOND  BAS +BAS          !
+ANGLE BAS SI1 SI2       !
+ANGLE -BAS BAS SI1      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI MET          0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SID   C5m    0.00  !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI PHE          0.00 !            - SI2
+ATOM BAS   P5     0.00 !    |     /   |
+ATOM SI1   SC4f   0.00 !   BAS-SI1    |
+ATOM SI2   SC4f   0.00 !    |     \   |
+ATOM SI3   SC4f   0.00 !            - SI3
+BOND  BAS SI1          !
+BOND  SI1 SI2  SI1 SI3  SI2 SI3 !these should be constraints
+BOND  BAS +BAS         !
+ANGLE BAS SI1 SI2      !
+ANGLE BAS SI1 SI3      !
+ANGLE -BAS BAS SI1     !
+ANGLE -BAS BAS +BAS    !
+!other possible ring angles that are not defined in Martini
+!these angles should NOT be used
+!one should take care to specify "auto none" in psfgen so that it does not automatically generate them
+!the definitions are left here (commented out) as a reminder
+!ANGLE SI1 SI2 SI3 ! 60
+!ANGLE SI2 SI3 SI1 ! 60
+!ANGLE SI3 SI1 SI2 ! 60
+IMPR BAS SI2 SI3 SI1
+DIHE -BAS BAS +BAS #BAS
+
+RESI PRO          0.00  !
+ATOM BAS   P5     0.00  !    |
+ATOM SID   AC2p   0.00  !   BAS-SID
+BOND  BAS SID  BAS +BAS !    |
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     ! 
+DIHE -BAS BAS +BAS #BAS ! 
+
+RESI SER          0.00  !    |
+ATOM BAS   P5     0.00  !   BAS-SID
+ATOM SID   P1s    0.00  !    |
+BOND  BAS SID  BAS +BAS ! 
+ANGLE -BAS BAS SID      !
+ANGLE -BAS BAS +BAS     !
+DIHE -BAS BAS +BAS #BAS !
+
+RESI THR          0.00  !    |
+ATOM BAS   P5     0.00  !   BAS-SID
+ATOM SID   P1t    0.00  !    |
+BOND  BAS SID !this should be a constraint
+BOND  BAS +BAS
+ANGLE -BAS BAS SID
+ANGLE -BAS BAS +BAS
+DIHE -BAS BAS +BAS #BAS
+
+RESI TRP          0.00  !
+ATOM BAS   P5     0.00  !            SI2
+ATOM SI1   SC4w   0.00  !    |     /  |  \
+ATOM SI2   SP1w   0.00  !   BAS-SI1   |    SI4
+ATOM SI3   SC4w   0.00  !    |     \  |  /
+ATOM SI4   SC4w   0.00  !            SI3
+BOND  BAS SI1           !
+BOND  SI1 SI2  SI2 SI3  SI1 SI3  SI2 SI4  SI3 SI4 !these should be constraints
+BOND  BAS +BAS
+ANGLE BAS SI1 SI2
+ANGLE BAS SI1 SI3
+ANGLE -BAS BAS SI1
+ANGLE -BAS BAS +BAS
+!other possible ring angles that are not defined in Martini
+!these angles should NOT be used
+!one should take care to specify "auto none" in psfgen so that it does not automatically generate them
+!the definitions are left here (commented out) as a reminder
+!ANGLE SI1 SI2 SI3 ! 60
+!ANGLE SI2 SI3 SI1 ! 60
+!ANGLE SI3 SI1 SI2 ! 60
+!ANGLE SI2 SI4 SI3 ! 60
+!ANGLE SI4 SI3 SI2 ! 60
+!ANGLE SI3 SI2 SI1 ! 60
+!!ANGLE SI1 SI2 SI4 ! 120 (this would conflict with SI1 SI2 SI3 if defined)
+!!ANGLE SI1 SI3 SI4 ! 120
+IMPR BAS SI2 SI3 SI1
+IMPR BAS SI2 SI4 SI3
+DIHE -BAS BAS +BAS #BAS
+
+RESI TYR          0.00  !            - SI2
+ATOM BAS   P5     0.00  !    |     /   |
+ATOM SI1   SC4y   0.00  !   BAS-SI1    |
+ATOM SI2   SC4y   0.00  !    |     \   |
+ATOM SI3   SP1y   0.00  !            - SI3
+BOND  BAS SI1           !
+BOND  SI1 SI2  SI1 SI3  SI2 SI3 !these should be constraints
+BOND  BAS +BAS
+ANGLE BAS SI1 SI2
+ANGLE BAS SI1 SI3
+ANGLE -BAS BAS SI1
+ANGLE -BAS BAS +BAS
+!other possible ring angles that are not defined in Martini
+!these angles should NOT be used
+!one should take care to specify "auto none" in psfgen so that it does not automatically generate them
+!the definitions are left here (commented out) as a reminder
+!ANGLE SI1 SI2 SI3 ! 60
+!ANGLE SI2 SI3 SI1 ! 60
+!ANGLE SI3 SI1 SI2 ! 60
+IMPR BAS SI2 SI3 SI1
+DIHE -BAS BAS +BAS #BAS
+
+RESI VAL          0.00  !    |
+ATOM BAS   P5     0.00  !   BAS-SID
+ATOM SID   AC2v   0.00  !    |
+BOND  BAS SID !this should be a constraint
+BOND  BAS +BAS
+ANGLE -BAS BAS SID
+ANGLE -BAS BAS +BAS
+DIHE -BAS BAS +BAS #BAS
+! end of amino acids
+
+
+! patches for protein secondary structure
+
+!bend
+PRES OCB 0.00 ! bend
+ATOM BAS P5B 0.0
+
+PRES GCB 0.00 ! glycine in bend
+ATOM BAS P5B 0.0
+
+PRES PCB 0.00 ! proline in bend
+ATOM BAS NaB 0.0
+
+PRES ACB 0.00 ! alanine in bend
+ATOM BAS P4B 0.0
+
+! coil
+PRES OCC 0.00 ! coil 
+ATOM BAS P5C 0.0
+
+PRES GCC 0.00 ! glycine in coil
+ATOM BAS P5C 0.0
+
+PRES PCC 0.00 ! proline in coil 
+ATOM BAS NaC 0.0
+
+PRES ACC 0.00 ! alanine in coil
+ATOM BAS P4C 0.0
+
+! free
+
+PRES OCF 0.0 ! free
+ATOM BAS P5F 0.0
+
+PRES GCF 0.0 ! glycine free
+ATOM BAS P5F 0.0
+
+PRES PCF 0.0 ! proline free
+ATOM BAS NaF 0.0
+
+PRES ACF 0.0 ! alanine free
+ATOM BAS P4F 0.0
+
+! helix
+
+PRES OCH 0.0 ! helix
+ATOM BAS N0H 0.0
+
+PRES GCH 0.0 ! glycine in helix
+ATOM BAS N0H 0.0
+
+PRES PCH 0.0 ! proline in helix
+ATOM BAS C5Hp 0.0
+
+PRES ACH 0.0 ! alanine in helix
+ATOM BAS C5H 0.0
+
+! helical termini (the first and last residues of an alpha helix, not to be confused with the ends of the segment)
+!N-terminal
+PRES OCN 0.0 ! helical N terminus
+ATOM BAS NdH 0.0
+
+PRES GCN 0.0 ! glycine helical N terminus
+ATOM BAS NdH 0.0
+
+PRES PCN 0.0 ! proline helical N terminus
+ATOM BAS N0Hp 0.0
+
+PRES ACN 0.0 ! alanine helical N terminus
+PRES BAS N0H 0.0
+
+!C-terminal
+PRES OCI 0.0 ! helical C terminus
+ATOM BAS NaH 0.0
+
+PRES GCI 0.0 ! glycine helical C terminus
+ATOM BAS NaH 0.0
+
+PRES PCI 0.0 ! proline helical C terminus
+ATOM BAS NaH 0.0
+
+PRES ACI 0.0 ! alanine helical C terminus
+PRES BAS N0H 0.0
+
+! strand/turn
+PRES OCT 0.0 ! beta strand/turn
+ATOM BAS NdaT 0.0
+
+PRES GCT 0.0 ! glycine in strand/turn
+ATOM BAS NdaT 0.0
+
+PRES PCT 0.0 ! proline in strand/turn
+ATOM BAS N0T 0.0
+
+PRES ACT 0.0 ! alanine in strand/turn
+ATOM BAS N0T 0.0
+
+! extended/beta
+PRES OCE 0.0 ! beta strand/turn
+ATOM BAS NdaE 0.0
+
+PRES GCE 0.0 ! glycine in strand/turn
+ATOM BAS NdaE 0.0
+
+PRES PCE 0.0 ! proline in strand/turn
+ATOM BAS N0E 0.0
+
+PRES ACE 0.0 ! alanine in strand/turn
+ATOM BAS N0E 0.0
+
+! disulfide bond
+PRES DISU 0.0 
+BOND 1C5c 2C5c
+
+
+! NTER/CTER
+
+! generic NTER/CTER termini
+! should never be used except as a placeholder; they are replaced in fix_martini_psf.tcl with secondary-structure-appropriate patches
+PRES NTER 1.0
+ATOM BAS QdC 1.0
+
+PRES CTER -1.0
+ATOM BAS QaC -1.0
+
+
+! proper NTER/CTER termini, which depend on the secondary-structure assigment of the residue
+! these patches are applied by fix_martini_psf.tcl after the initial psf is constructed
+
+!coil
+PRES NTC 1.0     ! charged coil Nter (NTER)
+ATOM BAS QdC 1.0
+
+PRES CTC -1.0    ! charged coil Cter (CTER)
+ATOM BAS QaC -1.0
+
+PRES NUC 0.0     ! uncharged coil Nter (ACE)
+ATOM BAS NaC 0.0
+
+PRES CUC 0.0     ! uncharged coil Nter (CT3)
+ATOM BAS P3C 0.0
+
+!bend
+PRES NTB 1.0     ! charged bend Nter (NTER)
+ATOM BAS QdB 1.0
+
+PRES CTB -1.0    ! charged bend Cter (CTER)
+ATOM BAS QaB -1.0
+
+PRES NUB 0.0     ! uncharged bend Nter (ACE)
+ATOM BAS NaB 0.0
+
+PRES CUB 0.0     ! uncharged bend Cter (CT3)
+ATOM BAS P3B 0.0
+
+!turn
+PRES NTT 1.0     ! charged turn Nter (NTER)
+ATOM BAS QdT 1.0
+
+PRES CTT -1.0    ! charged turn Cter (CTER)
+ATOM BAS QaT -1.0
+
+PRES NUT 0.0     ! uncharged turn Nter (ACE)
+ATOM BAS NaT 0.0
+
+PRES CUT 0.0     ! uncharged turn Cter (CT3)
+ATOM BAS P3T 0.0
+
+!extended
+PRES NTE 1.0     ! charged extended Nter (NTER)
+ATOM BAS QdEX 1.0
+
+PRES CTE -1.0    ! charged extended Cter (CTER)
+ATOM BAS QaEX -1.0
+
+PRES NUE 0.0     ! uncharged extended Nter (ACE)
+ATOM BAS NaEX 0.0
+
+PRES CUE 0.0     ! uncharged extended Cter (CT3)
+ATOM BAS P3EX 0.0
+
+!helix
+PRES NTH 1.0     ! charged helix Nter (NTER)
+ATOM BAS QdH 1.0
+
+PRES CTH -1.0    ! charged helix Cter (CTER)
+ATOM BAS QaH -1.0
+
+PRES NUH 0.0     ! uncharged helix Nter (ACE)
+ATOM BAS NaH 0.0
+
+PRES CUH 0.0     ! uncharged helix Cter (CT3)
+ATOM BAS P3H 0.0
+
+
+END
+
