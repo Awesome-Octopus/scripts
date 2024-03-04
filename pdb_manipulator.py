@@ -239,6 +239,8 @@ def get_dihedral_backbones(info_table, ca_ser_nums):
     # given a LIST of alpha carbon serial numbers, return sets of the serial
     # numbers for surrounding backbone atoms needed to get/set dihedrals
 
+    if isinstance(ca_ser_nums, int):
+        ca_ser_nums = [ca_ser_nums]
     bb_ser_nums = []
     kwargs = {}  # what we feed into select
     for ndx, sn in enumerate(ca_ser_nums):
@@ -306,6 +308,8 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
 
         # serial numbers on the same chain
         same_chain_atms = select(info_table, **kwargs)
+        for i in same_chain_atms:
+            print(info_table[i])
 
         if atom_name == anchor:
 
@@ -422,15 +426,18 @@ def measure_dihedral(set_of_points, **kwargs):
     # the way to determine whether this angle should be a positive or negative
     # is to see if the cross product of the plane normals is parallel or
     # anti-parallel to the axis of rotation as determined by the dot product
-    if np.dot(np.cross(normal_plane1, normal_plane2), rotation_axis) > 0:
+    if np.dot(np.cross(normal_plane1, normal_plane2), rotation_axis) < 0:
         theta = -theta
-    if 'debug_mode' in kwargs:
-        print(f'theta: {theta} ({theta*180/np.pi} degrees)')
+    # if 'debug_mode' in kwargs:
+    #     print(f'theta: {theta} ({theta*180/np.pi} degrees)')
 
     return theta
 
 
 def get_phi_psi(coordinates, info_table, **kwargs):
+
+    # !!!!!! re-write this to only take serial numbers this is getting too
+    # complicated to handle this input
     """
     Update the phi and psi values in the info_table for the specified residues.
 
@@ -450,101 +457,159 @@ def get_phi_psi(coordinates, info_table, **kwargs):
     else:
         debug_mode = False
 
-    if debug_mode:
-        print(f'the kwargs fed into get_phi_psi are {kwargs}')
+    # -------------- mode 1, get values by serial numbers
+    if 'ser_num' in kwargs:
+        kwargs.pop('debug_mode', False)
+        if len(kwargs.items()) > 1:
+            raise ValueError('If serial numbers are specified as the selection'
+                             ' criterion, no other criteria can be given')
+        else:
+            # if debug_mode:
+            # print('get_phi_psi activated in mode 1. Searching based on'
+            #       ' serial numbers.')
+            ser_nums = kwargs.pop('ser_num')
+            if isinstance(ser_nums, int):
+                ser_nums = [ser_nums]
+            alpha_sns = []
+            for sn in ser_nums:
 
-    selected_residue_ser_nums = []
-    if 'chain' in kwargs:
-        selected_chains = kwargs.pop('chain', None)
+                # if it is not an alpha carbon, find the CA of the residue it
+                # is on
+                # print(sn)
+                k = info_table[sn]
+                if k['atom_name'] != 'CA':
+                    kwargs['submodel'] = k['submodel']
+                    kwargs['model_name'] = k['model_name']
+                    kwargs['res_num'] = k['res_num']
+                    kwargs['chain'] = k['chain']
+                    kwargs['atom_name'] = 'CA'
+                    ca_sn = select(info_table, **kwargs)[0]
+                else:
+                    ca_sn = sn
+
+                alpha_sns.append(ca_sn)
+            # print(alpha_sns)
+            bb_ser_num_sets = get_dihedral_backbones(info_table, alpha_sns)
+
+            # print(bb_ser_num_sets)
+            # check if phi and psi are definable for this residue, then
+            # pass backbone atom ser_nums to measure_dihedral to get them
+            for group in bb_ser_num_sets:
+                # print(f'group = {group}')
+                if group[0] is not None:  # if there was a prev residue
+                    vects = [coordinates[sn] for sn in group[0:4]]
+                    # pass first 4
+                    phi = measure_dihedral(vects, debug_mode=True)
+                    for sn in group[1:4]:
+                        info_table[sn]['phi'] = phi
+                else:  # else phi is NaN
+                    for sn in group[1:4]:
+                        info_table[sn]['phi'] = float('nan')
+                if group[-1] is not None:  # if there is a next residue
+                    # pass last 4, reversed
+                    vects = [coordinates[sn] for sn in group[:0:-1]]
+                    psi = measure_dihedral(vects)
+                    for sn in group[-2:0:-1]:
+                        info_table[sn]['psi'] = psi
+                else:  # else psi is NaN
+                    for sn in group[-2:0:-1]:
+                        info_table[sn]['psi'] = float('nan')
+
+    # ------------- mode 2, parse kwargs and find phi/psi for all matches
     else:
-
-        # if no chains were specified, make the selected chain the list
-        # of all chains, we don't need to make this a kwarg because this is
-        # default behaviour of select, but we do need a list we can iterate
-        # through
-        selected_chains = list({info_table[s]['chain'] for s in
-                               range(len(info_table))})
-
-    if debug_mode:
-        pass
-        print(f"the selected chains for get_phi_psi are {selected_chains}")
-
-        # if atoms names were specified in kwargs ignore them and set them to
-        # C alpha, otherwise specify c alpha
-    kwargs['atom_name'] = 'CA'
-
-    # if an explicit list of residues was passed, extract them
-    if 'res_num' in kwargs:
-        specified_residues = kwargs.pop('res_num', None)
-
-        if isinstance(specified_residues, int):
-            specified_residues = [specified_residues]
-            print(f'specified residues are {specified_residues}')
-    else:
-        specified_residues = None
-
-    for ch in selected_chains:
-
-        kwargs.pop('res_num', None)
-        kwargs['chain'] = ch
-
-        # if no residues were specified, make the selected residues be
-        # the list of all residues ON THE CHAIN WE ARE ON IN THE ITERATION
-        if specified_residues is None:
-
-            residues_to_query = list({info_table[s]['res_num'] for s in
-                                     select(info_table, **kwargs)})
-            if debug_mode:
-                print("get_phi_psi: no residues were explicitly passed, "
-                      f"so the selected residues for chain {ch} are all "
-                      f"of them:\n{residues_to_query}")
-
-        # if residues were explicitly specified, iterate over those instead
+        selected_residue_ser_nums = []
+        if 'chain' in kwargs:
+            selected_chains = kwargs.pop('chain', None)
         else:
 
-            residues_to_query = specified_residues
-            if isinstance(residues_to_query, int):
-                residues_to_query = [residues_to_query]
-            if debug_mode:
+            # if no chains were specified, make the selected chain the list
+            # of all chains, we don't need to make this a kwarg because this is
+            # default behaviour of select, but we do need a list we can iterate
+            # through
+            selected_chains = list({info_table[s]['chain'] for s in
+                                   range(len(info_table))})
 
-                print(
-                    f'the residues being queried are:\n{residues_to_query}')
+        if debug_mode:
+            pass
+            print(f"the selected chains for get_phi_psi are {selected_chains}")
 
-                # for n in residues_to_query:
-
-                # get the ser nums for all C alphas on residues across all chains we
-                # specified
-        kwargs['res_num'] = residues_to_query
+            # if atoms names were specified in kwargs ignore them and set them to
+            # C alpha, otherwise specify c alpha
         kwargs['atom_name'] = 'CA'
-        ca_ser_nums = select(info_table, **kwargs)
-        # print(f'ca serial number are {ca_ser_nums}')
-        bb_ser_num_sets = get_dihedral_backbones(info_table, ca_ser_nums)
 
-        for group in bb_ser_num_sets:
-            # print(f'group = {group}')
-            if group[0] is not None:  # if there was a prev residue
-                vects = [coordinates[sn] for sn in group[0:4]]  # pass first 4
-                phi = measure_dihedral(vects, debug_mode=True)
-                for sn in group[1:4]:
-                    # print(sn)
-                    # print('can assign phi')
-                    info_table[sn]['phi'] = phi
-            else:  # else phi is NaN
-                for sn in group[1:4]:
-                    # print(sn)
-                    info_table[sn]['phi'] = float('nan')
-            if group[-1] is not None:  # if there is a next residue
-                # pass last 4, reversed
-                vects = [coordinates[sn] for sn in group[:0:-1]]
-                psi = measure_dihedral(vects)
-                for sn in group[-2:0:-1]:
-                    # print(sn)
-                    # print('can assign psi')
-                    info_table[sn]['psi'] = psi
-            else:  # else psi is NaN
-                for sn in group[-2:0:-1]:
-                    # print(sn)
-                    info_table[sn]['psi'] = float('nan')
+        # if an explicit list of residues was passed, extract them
+        if 'res_num' in kwargs:
+            specified_residues = kwargs.pop('res_num', None)
+
+            if isinstance(specified_residues, int):
+                specified_residues = [specified_residues]
+                print(f'specified residues are {specified_residues}')
+        else:
+            specified_residues = None
+
+        for ch in selected_chains:
+
+            kwargs.pop('res_num', None)
+            kwargs['chain'] = ch
+
+            # if no residues were specified, make the selected residues be
+            # the list of all residues ON THE CHAIN WE ARE ON IN THE ITERATION
+            if specified_residues is None:
+
+                residues_to_query = list({info_table[s]['res_num'] for s in
+                                         select(info_table, **kwargs)})
+                if debug_mode:
+                    print("get_phi_psi: no residues were explicitly passed, "
+                          f"so the selected residues for chain {ch} are all "
+                          f"of them:\n{residues_to_query}")
+
+            # if residues were explicitly specified, iterate over those instead
+            else:
+
+                residues_to_query = specified_residues
+                if isinstance(residues_to_query, int):
+                    residues_to_query = [residues_to_query]
+                if debug_mode:
+
+                    print(
+                        f'the residues being queried are:\n{residues_to_query}')
+
+                    # for n in residues_to_query:
+
+                    # get the ser nums for all C alphas on residues across all
+                    # chains we specified
+            kwargs['res_num'] = residues_to_query
+            kwargs['atom_name'] = 'CA'
+            ca_ser_nums = select(info_table, **kwargs)
+            # print(f'ca serial number are {ca_ser_nums}')
+            bb_ser_num_sets = get_dihedral_backbones(info_table, ca_ser_nums)
+
+            for group in bb_ser_num_sets:
+                # print(f'group = {group}')
+                if group[0] is not None:  # if there was a prev residue
+                    vects = [coordinates[sn]
+                             for sn in group[0:4]]  # pass first 4
+                    phi = measure_dihedral(vects, debug_mode=True)
+                    for sn in group[1:4]:
+                        # print(sn)
+                        # print('can assign phi')
+                        info_table[sn]['phi'] = phi
+                else:  # else phi is NaN
+                    for sn in group[1:4]:
+                        # print(sn)
+                        info_table[sn]['phi'] = float('nan')
+                if group[-1] is not None:  # if there is a next residue
+                    # pass last 4, reversed
+                    vects = [coordinates[sn] for sn in group[:0:-1]]
+                    psi = measure_dihedral(vects)
+                    for sn in group[-2:0:-1]:
+                        # print(sn)
+                        # print('can assign psi')
+                        info_table[sn]['psi'] = psi
+                else:  # else psi is NaN
+                    for sn in group[-2:0:-1]:
+                        # print(sn)
+                        info_table[sn]['psi'] = float('nan')
 
 
 def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
@@ -596,18 +661,21 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
         # amide_carbon (carbonyl) is ser_nums[2]
 
         current_angle = info_table[ser_num][angle_type]
-        print(f"for ser num {ser_num} check what the current {angle_type}"
-              f"is: {current_angle}")
+        # print(f"for ser num {ser_num} check what the current {angle_type}"
+        #       f" is: {current_angle}")
         if math.isnan(current_angle):
             kwargs.pop('debug_mode', None)
-            get_phi_psi(coordinates, info_table, **kwargs)
+
+            get_phi_psi(coordinates, info_table, ser_num=ser_num)
+
             current_angle = info_table[ser_num][angle_type]
+            # print(f'current angle is: {current_angle}')
         # if it is still undefined, you cannot take the angle
         if math.isnan(current_angle):
             return None
         else:
-            print(f"find_rotation_angle: {target_angle - current_angle}"
-                  f" ({(target_angle - current_angle)*180/np.pi} degrees)")
+            # print(f"find_rotation_angle: {target_angle - current_angle}"
+            #       f" ({(target_angle - current_angle)*180/np.pi} degrees)")
             return (target_angle - current_angle)
 
     if 'debug_mode' in kwargs:
@@ -637,20 +705,25 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
     for ndx, ca in enumerate(ca_ser_nums):
 
-        print(
-            f'for the alpha carbon serial number {ca} ~~~~~~~~~~~~~~~~~~~~~~\n')
+        # print(
+        #     f'for the alpha carbon serial number {ca} ~~~~~~~~~~~~~~~~~~~~~~\n')
         backbone_sn_groups = get_dihedral_backbones(info_table, [ca])
-        print(
-            f"relevant backbone atom serial numbers are {backbone_sn_groups}")
+        # print(
+        #     f"relevant backbone atom serial numbers are {backbone_sn_groups}")
 
         for bb_sn in backbone_sn_groups:
+
+            # bb_sn is a gorup of backbone serial numbers for a given residue
+            # there are 5. in the following order [prev C, amide, alpha, C, next amide]
+            # the first and last are none if there is no residue before or after
+
             # if phi was there was a prev residue and phi was
             # the selected angle
+            print(info_table[bb_sn[3]])
             if bb_sn[0] is not None and angle_type == 'phi':
                 # and it is not a proline
                 if info_table[bb_sn[2]]['res_name'] != 'PRO':
                     center = coordinates[bb_sn[2]].copy()
-
                     # after centering on alpha carbon this now defines the axis
                     # of rotation
                     amide = coordinates[bb_sn[1]] - center
@@ -661,6 +734,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                         info_table, bb_sn[1], anchor)
                     print(
                         f"given an anchor of {anchor} our set of rotating atom serial numbers is {rotation_segment}")
+
                     rot_ang = find_rotation_angle(angle, bb_sn[2])
                     for ser_num in rotation_segment:
                         # print(
@@ -676,10 +750,10 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                         # print(
                         #     f"When the alpha carbon coordinates {center} are added back to {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
 
-                    get_phi_psi(coordinates, info_table, **kwargs)
-                    print(
-                        f"this gives us a phi of {info_table[bb_sn[2]]['phi']}")
-            elif bb_sn[4] is not None and angle_type == 'psi':
+                    get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
+                    # print(
+                    #     f"this gives us a phi of {info_table[bb_sn[2]]['phi']}")
+            if bb_sn[4] is not None and angle_type == 'psi':
                 # if we specified psi and there an amide at N +1 (ie not c term)
                 center = coordinates[bb_sn[2]].copy()
 
@@ -708,9 +782,9 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     # print(
                     #     f"When the alpha carbon coordinates {center} are added back to {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
 
-                get_phi_psi(coordinates, info_table, **kwargs)
-                print(
-                    f"this gives us a psi of {info_table[bb_sn[2]]['psi']} ({info_table[bb_sn[2]]['psi']*180/np.pi} degrees)")
+            get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
+            # print(
+            #     f"this gives us a psi of {info_table[bb_sn[2]]['psi']} ({info_table[bb_sn[2]]['psi']*180/np.pi} degrees)")
 
 
 def write_pdb(coordinates, info_table, outfile=None):
@@ -1747,4 +1821,4 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
 # axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
 # over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
 
-coordinates, info_table = import_pdb('test.pdb')
+coordinates, info_table = import_pdb('one_of_each.pdb')
