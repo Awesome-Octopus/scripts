@@ -308,8 +308,12 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
 
         # serial numbers on the same chain
         same_chain_atms = select(info_table, **kwargs)
-        for i in same_chain_atms:
-            print(info_table[i])
+        kwargs['res_num'] = info_table[atom_sn]['res_num']
+        k = kwargs['res_num']
+        cur_res = [sn for sn in same_chain_atms if info_table[sn]['res_num'] == k]
+        print(cur_res)
+        # for i in same_chain_atms:
+        #     print(info_table[i])
 
         if atom_name == anchor:
 
@@ -318,55 +322,55 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
             # supposed to be the pdb format
             if atom_name == 'C':
                 # get the index of the serial number that has the N atom
-                kwargs['res_num'] = info_table[atom_sn]['res_num']
+
                 kwargs['atom_name'] = 'N'
                 n = select(info_table, **kwargs)
                 kwargs.pop('atom_name')
-                same_residue = select(info_table, **kwargs)
-                sidechain = [info_table[s]['ser_num'] for s in same_residue
-                             if info_table[s]['atom_name'] != 'C']
 
+                sidechain = [info_table[s]['ser_num'] for s in cur_res
+                             if info_table[s]['atom_name'] not in ['C', 'O']]
                 # return everything up to that, but also the sidechain atoms
-                # and alpha carbon but not the carbonyl
-                if n != 0:
-                    return same_chain_atms[0:n[0]] + sidechain
-                else:
-                    return sidechain
+                # and alpha carbon but not the carbonyl or oxygen
+
+                return same_chain_atms[0:n[0]] + sidechain
 
             else:
-                # get the index of the serial number that has the C atom
-                index = next((i for i, sn in enumerate(same_chain_atms)
-                             if sn == atom_sn), None)
-                # return everything after that
+                # get the index of the serial number that has the next amide
+                next_amide = max(cur_res) + 1
+                # number right after last in curr res should be amide Nitro
 
-                if index is not None:
-                    return same_chain_atms[index+1:]
+                # get everything on current res except amide n and hydro
+                amide_excluded = [sn for sn in cur_res if
+                                  info_table[sn]['atom_name'] not in ['N', 'H']]
+
+                if next_amide is not None:
+                    return same_chain_atms[next_amide:] + amide_excluded
                 else:
-                    raise ValueError
+                    return amide_excluded
 
         else:
-            # NOTE:
-            # this method is simpler and saves computation but assumes that
-            # atoms are indexed in the correct order by pdb convention
-            # and that amide nitrogen is always 2 indexes away from carboxyl
-            # in all cases, and the model complete otherwise your pdb must
-            # be fixed
-            if atom_name == 'C':
 
-                index = next((i for i, sn in enumerate(same_chain_atms)
-                             if sn == atom_sn), None)
-                if index is not None:
-                    return same_chain_atms[index+1:]
+            if atom_name == 'C':  # grab everthing carboxyl forward including oxygen
+
+                # if carboxyl O is there, it will right after the C. include it.
+                if info_table[atom_sn+1]['atom_name'] == 'O':
+                    carboxyl = [atom_sn, atom_sn+1]
+                else:
+                    carboxyl = [atom_sn]
+                next_res = kwargs['res_num'] + 1
+                next_amide = [sn for sn in same_chain_atms if (info_table[sn]
+                              ['res_num'] == next_res and
+                              info_table[sn]['atom_name'] == 'N')]
+                if next_amide is not None:
+                    return same_chain_atms[next_amide[0]:] + carboxyl
                 else:
                     raise ValueError
-            else:
 
-                index = next((i for i, sn in enumerate(same_chain_atms)
-                             if sn == atom_sn), None)
-                if index is not None:
-                    return same_chain_atms[0:index]
-                else:
-                    raise ValueError
+            else:  # grab every residue before + the amide hydrogen and nitro
+                amide = [sn for sn in cur_res if info_table[sn]['atom_name']
+                         in ['N', 'H']]
+                cur_n = min(amide)  # current N will be before the amide hydro
+                return same_chain_atms[0:cur_n] + amide
 
     else:
         # in the future I will implement a way to directly manipulate side
@@ -661,21 +665,18 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
         # amide_carbon (carbonyl) is ser_nums[2]
 
         current_angle = info_table[ser_num][angle_type]
-        # print(f"for ser num {ser_num} check what the current {angle_type}"
-        #       f" is: {current_angle}")
         if math.isnan(current_angle):
             kwargs.pop('debug_mode', None)
 
             get_phi_psi(coordinates, info_table, ser_num=ser_num)
 
             current_angle = info_table[ser_num][angle_type]
-            # print(f'current angle is: {current_angle}')
         # if it is still undefined, you cannot take the angle
         if math.isnan(current_angle):
             return None
         else:
-            # print(f"find_rotation_angle: {target_angle - current_angle}"
-            #       f" ({(target_angle - current_angle)*180/np.pi} degrees)")
+            print(f"find_rotation_angle: {target_angle - current_angle}"
+                  f" ({(target_angle - current_angle)*180/np.pi} degrees)")
             return (target_angle - current_angle)
 
     if 'debug_mode' in kwargs:
@@ -705,12 +706,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
     for ndx, ca in enumerate(ca_ser_nums):
 
-        # print(
-        #     f'for the alpha carbon serial number {ca} ~~~~~~~~~~~~~~~~~~~~~~\n')
         backbone_sn_groups = get_dihedral_backbones(info_table, [ca])
-        # print(
-        #     f"relevant backbone atom serial numbers are {backbone_sn_groups}")
-
         for bb_sn in backbone_sn_groups:
 
             # bb_sn is a gorup of backbone serial numbers for a given residue
@@ -719,7 +715,6 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
             # if phi was there was a prev residue and phi was
             # the selected angle
-            print(info_table[bb_sn[3]])
             if bb_sn[0] is not None and angle_type == 'phi':
                 # and it is not a proline
                 if info_table[bb_sn[2]]['res_name'] != 'PRO':
@@ -732,27 +727,14 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     # applied to them
                     rotation_segment = isolate_segment(
                         info_table, bb_sn[1], anchor)
-                    print(
-                        f"given an anchor of {anchor} our set of rotating atom serial numbers is {rotation_segment}")
-
                     rot_ang = find_rotation_angle(angle, bb_sn[2])
                     for ser_num in rotation_segment:
-                        # print(
-                        #     f"To start we have {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} whose coordinates are {coordinates[ser_num]}")
                         coordinates[ser_num] -= center
-                        # print(
-                        #     f"When the alpha carbon coordinates {center} are subtracted from {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
                         coordinates[ser_num] = coordinates[ser_num].rotate_arround(
                             rot_ang, amide)
-                        # print(
-                        #     f"When rotated arround the amide, {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
                         coordinates[ser_num] += center
-                        # print(
-                        #     f"When the alpha carbon coordinates {center} are added back to {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
 
                     get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
-                    # print(
-                    #     f"this gives us a phi of {info_table[bb_sn[2]]['phi']}")
             if bb_sn[4] is not None and angle_type == 'psi':
                 # if we specified psi and there an amide at N +1 (ie not c term)
                 center = coordinates[bb_sn[2]].copy()
@@ -765,26 +747,20 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                 # applied to them, based on carboxyl
                 rotation_segment = isolate_segment(
                     info_table, bb_sn[3], anchor)
-                print(
-                    f"given an anchor of {anchor} our set of rotating atom serial numbers is {rotation_segment}")
+
                 rot_ang = find_rotation_angle(angle, bb_sn[2])
                 for ser_num in rotation_segment:
-                    # print(
-                    #     f"To start we have {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} whose coordinates are {coordinates[ser_num]}")
+
                     coordinates[ser_num] -= center
-                    # print(
-                    #     f"When the alpha carbon coordinates {center} are subtracted from {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
+
+                    # for some reason, even though the axis was defined
+                    # correctly, you need to reverse the sign on the rotation
+                    # for psi
                     coordinates[ser_num] = coordinates[ser_num].rotate_arround(
-                        rot_ang, carboxyl)
-                    # print(
-                    #     f"When rotated arround the amide, {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
+                        -rot_ang, carboxyl)
                     coordinates[ser_num] += center
-                    # print(
-                    #     f"When the alpha carbon coordinates {center} are added back to {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
 
             get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
-            # print(
-            #     f"this gives us a psi of {info_table[bb_sn[2]]['psi']} ({info_table[bb_sn[2]]['psi']*180/np.pi} degrees)")
 
 
 def write_pdb(coordinates, info_table, outfile=None):
