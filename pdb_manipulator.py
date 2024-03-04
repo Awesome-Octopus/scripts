@@ -129,7 +129,7 @@ class vector (np.ndarray):
         elif self.size == 2:
             rot_mat = np.asarray([[np.cos(angle), -1*np.sin(angle)],
                                   [np.sin(angle), np.cos(angle)]])
-            return np.matmul(self, rot_mat)
+            return np.matmul(rot_mat, self)
         else:
             raise ValueError(
                 'Error in vector.rotate_arround(): No axis of rotation '
@@ -165,9 +165,9 @@ def convert_angle(angle):
 def import_pdb(fname=None):
     # we are making an numpy array filled with the x y and z for each atom in each
     # row doing it as a fixed array because this is much more memory efficient
-    # for w in range(0, 100):
+
     if fname is None:
-        fname = 'simple.pdb'
+        fname = '7k3g.pdb'
     outfile_name = fname[0:-4]
     structure_id = "mode_7"
     parser = PDBParser(PERMISSIVE=1)
@@ -213,8 +213,7 @@ def select(info_table, **kwargs):
     serial_numbers = []
     info = info_table
     db = kwargs.pop('debug_mode', False)
-    # if db:
-    #     print(f'debug_mode for calling select is {db}')
+
     for key, value in kwargs.items():
         if isinstance(value, list):
             info = [s for s in info if s[key] in value]
@@ -234,17 +233,44 @@ def select(info_table, **kwargs):
 
     return serial_numbers
 
-# !!! this function has grown way too complicated. it should now only allow
-# !!! reference to one residue on one chain.
-# !!! TO DO: REPLACE THIS WITH A SIMPLE FUNCTION that takes 4 vectors
-# !!! and returns a dihedral angle, and another function that calls it
-# !!! that determines which 4 vectors those are given a chain, model and
-# !!! and residue, and angle type, and relies on a function is_terminus
-# !!! to tell if a ser_number is on a residue that is on an n or c terminus.
+
+def get_dihedral_backbones(info_table, ca_ser_nums):
+
+    # given a LIST of alpha carbon serial numbers, return sets of the serial
+    # numbers for surrounding backbone atoms needed to get/set dihedrals
+
+    bb_ser_nums = []
+    kwargs = {}  # what we feed into select
+    for ndx, sn in enumerate(ca_ser_nums):
+        kwargs['res_num'] = info_table[sn]['res_num'] - 1
+        kwargs['chain'] = info_table[sn]['chain']
+        kwargs['model_name'] = info_table[sn]['model_name']
+        try:
+            # try to assign the previous carboxyl
+            kwargs['atom_name'] = 'C'
+            prev_c = select(info_table, **kwargs)
+            prev_c = prev_c[0]
+        except ValueError:
+            prev_c = None
+        amide = sn - 1  # amide should always be behind the C alpha
+        kwargs['res_num'] += 1
+        carboxyl = select(info_table, **kwargs)
+        carboxyl = carboxyl[0]
+        kwargs['atom_name'] = 'N'
+        kwargs['res_num'] += 1
+        try:
+            # try to assign the next amide
+            next_amide = select(info_table, **kwargs)
+            next_amide = next_amide[0]
+        except ValueError:
+            next_amide = None
+        bb_ser_nums.append([prev_c, amide, sn, carboxyl, next_amide])
+    return bb_ser_nums
 
 
 def isolate_segment(info_table, atom_sn, anchor='N'):
     '''
+        DESCRIPTION.
         NOTE: this does not check that the atom a and B serial numbers correspond
         to directly bonded atoms on the same chain. that responsibility is on the
         calling function to make sure this is correct.
@@ -252,17 +278,19 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
         Parameters
         ----------
         info_table : list of dictionaries
-            DESCRIPTION.
+
         anchor : string
-            which side of a chain to hold static, atoms on that side of the atom_sn
-            will not have serial numbers returned in the list. Default is 'N'
+            which side of a chain to hold static, atoms on that side of the 
+            atom_sn will not have serial numbers returned in the list. 
+            Valid input is 'N' or 'C'. Default is 'N'. 
+
         atom_sn : Int
-            the serial number of an atom directly bonded to another with no 
-            cyclization
+            the serial number of an atom directly bonded to another with no
+            cyclization i.e. it is not a member of a ring
 
         Returns
         -------
-        segment_ser_num : list of int.
+        segment_ser_num : list of int. 
 
     '''
 
@@ -304,11 +332,10 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
             else:
                 # get the index of the serial number that has the C atom
                 index = next((i for i, sn in enumerate(same_chain_atms)
-                              if sn == atom_sn), None)
+                             if sn == atom_sn), None)
                 # return everything after that
 
                 if index is not None:
-
                     return same_chain_atms[index+1:]
                 else:
                     raise ValueError
@@ -316,14 +343,14 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
         else:
             # NOTE:
             # this method is simpler and saves computation but assumes that
-            # atoms are indexed int he correct order by pdb convention
+            # atoms are indexed in the correct order by pdb convention
             # and that amide nitrogen is always 2 indexes away from carboxyl
             # in all cases, and the model complete otherwise your pdb must
             # be fixed
             if atom_name == 'C':
 
                 index = next((i for i, sn in enumerate(same_chain_atms)
-                              if sn == atom_sn), None)
+                             if sn == atom_sn), None)
                 if index is not None:
                     return same_chain_atms[index+1:]
                 else:
@@ -331,7 +358,7 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
             else:
 
                 index = next((i for i, sn in enumerate(same_chain_atms)
-                              if sn == atom_sn), None)
+                             if sn == atom_sn), None)
                 if index is not None:
                     return same_chain_atms[0:index]
                 else:
@@ -348,49 +375,57 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
     # depending on the anchor these may or may not be included
 
 
-def measure_dihedral(point_a: vector, point_b: vector, point_c: vector,
-                     point_d: vector):
+def measure_dihedral(set_of_points, **kwargs):
     '''
-    Parameters
-
-    points must be connected in the arrangement seen below
-      B---C
-     /     \
-    A       D
-
     Given points A, B, C, D as input, each vectors in R3, and for which no
     pair of these points are the same, and for which no combination of
     three of these points are co-linear to each other:
         (this conditional check will be handled by the calling function)
 
-    The vector B to C (that is C - B) forms the axis of rotation.
-    the plane P that bisects B to C is normal to it and is the plane of 
-    rotation.
-    The projection of the vector B to A (B - A) onto this plane forms the 
-    reference vector for measuring angle, we will call it A'. The projection 
-    of the vector C to D (D - C) onto P will be called D'. The dihedral angle 
-    is the angle relative to the vector A' onto the normal plane P such that 
-    the negative of this angle is used to compute a rotation matrix that 
-    when applied to D results in the D' having an angle of 0 with A'
+    The vector B to C forms the axis of rotation.
+    Rturn the angle between plane ABC and plane BCD relative to the axis of
+    rotation. The dihedral angle is the arccosine of the dot products of the
+    normal vectors of this plane. the sign of the cross product bweteen the
+    normal vectors determines if the angle is positive or negative relative 
+    to the axis of rotation
 
+    Parameters
+    ----------
+    set_of_points : list of exactly four R3 vectors which must be connected 
+    in the arrangement seen below
+      B ____ C
+     /********\
+    A**********D
 
+    **kwargs : list of dictionaries. - optional - Only the keyword 'debug_mode'
+    is used to provide verbose output. Default is None.
 
     Returns
 
        float64 the dihedral angle in radians between -pi and +pi
 
     '''
-    b_to_a = point_a - point_b
-    rotation_axis = point_c - point_b
-    c_to_d = point_d - point_c
-    a_prime = (b_to_a.project_onto_normal_plane(rotation_axis))
-    d_prime = (c_to_d.project_onto_normal_plane(rotation_axis))
-    theta = a_prime.angle_between(d_prime)
+    a_to_b = set_of_points[1] - set_of_points[0]
+    a_to_c = set_of_points[2] - set_of_points[0]
+    b_to_c = set_of_points[2] - set_of_points[1]
+    b_to_d = set_of_points[3] - set_of_points[1]
+    rotation_axis = -b_to_c
+
+    c_to_d = set_of_points[3] - set_of_points[2]
+
+    normal_plane1 = vector(np.cross(a_to_b, a_to_c))
+    normal_plane2 = vector(np.cross(b_to_c, b_to_d))
+
+    crossp = np.cross(normal_plane1, normal_plane2)
+    theta = normal_plane1.angle_between(normal_plane2)
+
     # the way to determine whether this angle should be a positive or negative
-    # is to see if the cross product of a and d prime is paralell or
+    # is to see if the cross product of the plane normals is parallel or
     # anti-parallel to the axis of rotation as determined by the dot product
-    if np.dot(np.cross(a_prime, d_prime), rotation_axis) < 0:
+    if np.dot(np.cross(normal_plane1, normal_plane2), rotation_axis) > 0:
         theta = -theta
+    if 'debug_mode' in kwargs:
+        print(f'theta: {theta} ({theta*180/np.pi} degrees)')
 
     return theta
 
@@ -428,44 +463,23 @@ def get_phi_psi(coordinates, info_table, **kwargs):
         # default behaviour of select, but we do need a list we can iterate
         # through
         selected_chains = list({info_table[s]['chain'] for s in
-                                range(len(info_table))})
+                               range(len(info_table))})
 
     if debug_mode:
+        pass
         print(f"the selected chains for get_phi_psi are {selected_chains}")
 
-    # if atoms names were specified in kwargs ignore them and set them to
-    # C alpha, otherwise specify c alpha
+        # if atoms names were specified in kwargs ignore them and set them to
+        # C alpha, otherwise specify c alpha
     kwargs['atom_name'] = 'CA'
-
-    # if 'res_num' in kwargs:
-    #     res_num = kwargs['res_num']
-    #     if debug_mode:
-    #         print('when modified to search for CA on a specific residue the'
-    #               f' kwargs fed to select are:\n{kwargs}')
-    #         print('get_phi_psi: the serial numbers that match these kwargs'
-    #               f' are:\n{select(info_table, **kwargs)}')
-    #     if isinstance(res_num, int):  # it must be a list
-    #         res_num = [res_num]
-    # else:
-    #     res_num = list({info_table[s]['res_num'] for s in select(info_table,
-    #                                                              **kwargs)})
-    #     kwargs['res_num'] = res_num
-    #     if debug_mode:
-    #         print('when modified to search for CA on a specific residue the'
-    #               f' kwargs fed to select are:\n{kwargs}')
-    #         print('get_phi_psi: the serial numbers that match these kwargs'
-    #               f' are:\n{select(info_table, **kwargs)}')
-    #     ser_nums = select(info_table, **kwargs)
-    #     for num in ser_nums:
-    #         res_num.append(info_table[num]['res_num'])
 
     # if an explicit list of residues was passed, extract them
     if 'res_num' in kwargs:
         specified_residues = kwargs.pop('res_num', None)
 
-        # if isinstance(specified_residues, int):
-        #     specified_residues = [specified_residues]
-        #     print(f'specified residues are {specified_residues}')
+        if isinstance(specified_residues, int):
+            specified_residues = [specified_residues]
+            print(f'specified residues are {specified_residues}')
     else:
         specified_residues = None
 
@@ -479,10 +493,10 @@ def get_phi_psi(coordinates, info_table, **kwargs):
         if specified_residues is None:
 
             residues_to_query = list({info_table[s]['res_num'] for s in
-                                      select(info_table, **kwargs)})
+                                     select(info_table, **kwargs)})
             if debug_mode:
                 print("get_phi_psi: no residues were explicitly passed, "
-                      f"so the selected residues for chain {ch} are all"
+                      f"so the selected residues for chain {ch} are all "
                       f"of them:\n{residues_to_query}")
 
         # if residues were explicitly specified, iterate over those instead
@@ -492,122 +506,45 @@ def get_phi_psi(coordinates, info_table, **kwargs):
             if isinstance(residues_to_query, int):
                 residues_to_query = [residues_to_query]
             if debug_mode:
+
                 print(
                     f'the residues being queried are:\n{residues_to_query}')
 
-        for n in residues_to_query:
+                # for n in residues_to_query:
 
-            kwargs['res_num'] = n
-            kwargs['atom_name'] = 'N'
-            n_ser_num = select(info_table, **kwargs)
+                # get the ser nums for all C alphas on residues across all chains we
+                # specified
+        kwargs['res_num'] = residues_to_query
+        kwargs['atom_name'] = 'CA'
+        ca_ser_nums = select(info_table, **kwargs)
+        # print(f'ca serial number are {ca_ser_nums}')
+        bb_ser_num_sets = get_dihedral_backbones(info_table, ca_ser_nums)
 
-            kwargs['atom_name'] = 'CA'
-            ca_ser_num = select(info_table, **kwargs)
-
-            kwargs['atom_name'] = 'C'
-            c_ser_num = select(info_table, **kwargs)
-
-            # if debug_mode:  # uncomment for extra nitty-gritty
-            #     print(f"The current res num is {n}")
-            #     print(f'the serial number of the N atom on this residue is'
-            #           f" {n_ser_num}")
-            #     print('the serial number of the alpha carbon on this'
-            #           f"residue is {ca_ser_num}")
-            #     print('the serial number of the carboxyl carbon on this'
-            #           f"residue is {c_ser_num}")
-
-            ca_to_c_bond_vect = coordinates[c_ser_num] - \
-                coordinates[ca_ser_num]
-            ca_to_c_bond_vect = ca_to_c_bond_vect.unitize()[0]
-
-            # for some reason subtracting vectors returns a list of
-            # vectors with a single element instead of the vector itself making
-            # the [0] indexing necessary
-
-            ca_to_n_bond_vect = coordinates[n_ser_num] - \
-                coordinates[ca_ser_num]
-
-            ca_to_n_bond_vect = ca_to_n_bond_vect.unitize()[0]
-
-            try:
-                kwargs['res_num'] = n - 1
-
-                # if there is no residue that has a number lower than ours we
-                # are at the N terminus, for which there is no phi value,
-                # otherwise you need the previous carbonyl carbon
-
-                kwargs['atom_name'] = 'C'
-                prev_c_ser_num = select(info_table, **kwargs)
-                n_to_prev_c_bond_vect = coordinates[prev_c_ser_num] - \
-                    coordinates[n_ser_num]
-                n_to_prev_c_bond_vect = n_to_prev_c_bond_vect.unitize()[0]
-
-                projection_a = n_to_prev_c_bond_vect.project_onto_normal_plane(
-                    ca_to_n_bond_vect)
-
-                projection_b = ca_to_c_bond_vect.project_onto_normal_plane(
-                    -1*ca_to_n_bond_vect)
-
-                phi = projection_a.angle_between(projection_b)
-                if debug_mode:
-                    print(f'Phi angle for residue {n} on chain {ch}: {phi}')
-            except ValueError:
-                phi = float('nan')
-
-                # if debug_mode:  # uncomment for extra nitty-gritty
-                #     print('get_phi_psi: we called for the n-terminus and select'
-                #           ' could not find an atom with res_num n - 1')
-
-            try:
-
-                # if there is no residue that has a number higher than ours we
-                # are at the c terminus, for which there is no psi value,
-                # otherwise you need the next amide nitrogen
-
-                kwargs['res_num'] = n + 1
-                kwargs['atom_name'] = 'N'
-                next_n_ser_num = select(info_table, **kwargs)
-                c_to_next_n_bond_vect = coordinates[next_n_ser_num] - \
-                    coordinates[c_ser_num]
-                c_to_next_n_bond_vect = c_to_next_n_bond_vect[0]
-                projection_a = ca_to_n_bond_vect.project_onto_normal_plane(
-                    ca_to_c_bond_vect)
-                projection_b = c_to_next_n_bond_vect.project_onto_normal_plane(
-                    -1*ca_to_c_bond_vect)
-                psi = projection_a.angle_between(projection_b)
-            except ValueError:
-                psi = float('nan')
-
-                # if debug_mode:  # uncomment for extra nitty-gritty
-                #     print('get_phi_psi: we called for the c-terminus and select'
-                #           ' could not find an atom with res_num n + 1')
-
-            kwargs['res_num'] = n
-            if 'atom_name' in kwargs:
-                kwargs.pop('atom_name', None)
-
-            selected_residue_ser_nums = select(info_table, **kwargs)
-            # if debug_mode:
-            # print(f"line 414: kwargs: {kwargs}")
-            # g = {info_table[i]['res_num']
-            #       for i in selected_residue_ser_nums}
-            # c = {info_table[i]['chain'] for i in selected_residue_ser_nums}
-            # print(f'serial numbers for get_phi_psi invoked on residues {g}'
-            #       f' of chain(s) {c} are:\n{selected_residue_ser_nums}')
-
-            for i in selected_residue_ser_nums:
-
-                info_table[i]['phi'] = phi
-                info_table[i]['psi'] = psi
-
-                if debug_mode:
-
-                    cur_res = str(info_table[i]['res_num']) + \
-                        ' ' + info_table[i]['res_name'] + ' @ ' + \
-                        info_table[i]['atom_name'] + \
-                        ' on chain ' + info_table[i]['chain']
-                    print(f'get_phi_psi: phi for {cur_res} is {phi}')
-                    print(f'get_phi_psi: psi for {cur_res} is {psi}')
+        for group in bb_ser_num_sets:
+            # print(f'group = {group}')
+            if group[0] is not None:  # if there was a prev residue
+                vects = [coordinates[sn] for sn in group[0:4]]  # pass first 4
+                phi = measure_dihedral(vects, debug_mode=True)
+                for sn in group[1:4]:
+                    # print(sn)
+                    # print('can assign phi')
+                    info_table[sn]['phi'] = phi
+            else:  # else phi is NaN
+                for sn in group[1:4]:
+                    # print(sn)
+                    info_table[sn]['phi'] = float('nan')
+            if group[-1] is not None:  # if there is a next residue
+                # pass last 4, reversed
+                vects = [coordinates[sn] for sn in group[:0:-1]]
+                psi = measure_dihedral(vects)
+                for sn in group[-2:0:-1]:
+                    # print(sn)
+                    # print('can assign psi')
+                    info_table[sn]['psi'] = psi
+            else:  # else psi is NaN
+                for sn in group[-2:0:-1]:
+                    # print(sn)
+                    info_table[sn]['psi'] = float('nan')
 
 
 def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
@@ -624,6 +561,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
     # if they aren't the complete model needs to be built. However checking
     # for this every time would be a major drain on computation time.
 
+    # !!!!!!!!!!!!!!!  CURRENTLY UNUSED !!!!!!!!!!!!!!!!!!!!!!!
     def same_residue(info_table, ser_num):
         # given a serial number, return all serial numbers on the same
         # residue and the same chain
@@ -634,17 +572,19 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
         # this will take advantage of the fact that the serial numbers
         # should always be in the order N, CA, C, O, then the rest
-        return(select(info_table, res_num=res, chain=chain, model_name=mod,
-                      submodel=smod))
+        same_res = select(info_table, res_num=res, chain=chain, model_name=mod,
+                          submodel=smod)
 
-    def select_rotating_atoms(info_table, angle_type, anchor, ca_ser_num):
-        # given the angle type, the anchor, and the alpha carbon sn, return
-        # all the serial numbers that will be subject to rotation matrix
-        # multiplication
-        pass
+        n = (info_table[sn]['ser_num'] for sn in same_res if
+             info_table[sn]['atom_name'] == 'N')
+        ca = (info_table[sn]['ser_num'] for sn in same_res if
+              info_table[sn]['atom_name'] == 'CA')
+        c = (info_table[sn]['ser_num'] for sn in same_res if
+             info_table[sn]['atom_name'] == 'C')
 
-    def find_rotation_angle(coordinates, info_table, angle_type, target_angle,
-                            ser_nums):
+        return None
+
+    def find_rotation_angle(target_angle, ser_num):
         # given the residue pointed to by the ca_ser_num, and the desired
         # angle type, look up that angle, or call get_phi_psi if needed
         # to get it, and find the angle you must rotate by to end up
@@ -655,19 +595,20 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
         # c_alpha_sn  is ser_nums [1]
         # amide_carbon (carbonyl) is ser_nums[2]
 
-        current_angle = info_table[ser_nums[1]][angle_type]
+        current_angle = info_table[ser_num][angle_type]
+        print(f"for ser num {ser_num} check what the current {angle_type}"
+              f"is: {current_angle}")
         if math.isnan(current_angle):
-
+            kwargs.pop('debug_mode', None)
             get_phi_psi(coordinates, info_table, **kwargs)
-
+            current_angle = info_table[ser_num][angle_type]
         # if it is still undefined, you cannot take the angle
         if math.isnan(current_angle):
             return None
         else:
-            return convert_angle((target_angle - current_angle))
-
-    def rotate_by_bond(rotating_segment, rot_angl, rot_axis):
-        rotated_coords = rotating_segment.rotate_arround(rot_angl, rot_axis)
+            print(f"find_rotation_angle: {target_angle - current_angle}"
+                  f" ({(target_angle - current_angle)*180/np.pi} degrees)")
+            return (target_angle - current_angle)
 
     if 'debug_mode' in kwargs:
         debug_mode = kwargs['debug_mode']
@@ -688,328 +629,96 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
     # if a serial number for an atom is passed, instead refer to the residue
     # number that that atom is on
 
-    kwargs['atom_name'] = ['CA']
+    kwargs['atom_name'] = 'CA'
     # if an atom name was specified ignore it
     # and search for 'CA'
     ca_ser_nums = select(info_table, **kwargs)
-    print(f'c alpha ser_nums are {ca_ser_nums}')
+    # print(f'c alpha ser_nums are {ca_ser_nums}')
 
     for ndx, ca in enumerate(ca_ser_nums):
 
-        print(f'for the alpha carbon serial number {ca}')
-        # for every ca on residues where we want to change the angle
-        # get all the atoms on the same chain as it
-        kwargs.pop('res_num', None)
-        kwargs.pop('atom_name', None)
-        kwargs['model_name'] = info_table[ca_ser_nums[ndx]]['model_name']
-        kwargs['submodel'] = info_table[ca_ser_nums[ndx]]['submodel']
-        kwargs['chain'] = info_table[ca_ser_nums[ndx]]['chain']
-        print(f'the kwargs fed into select are:\n{kwargs}')
-        ser_nums_on_same_chain = select(info_table, **kwargs)
-        print(f'the ser nums on the same chain are:\n{ser_nums_on_same_chain}')
-        # then change kwargs to specify a specific residue on that chain
-        kwargs['res_num'] = info_table[ca_ser_nums[ndx]]['res_num']
-
-        # and then get the amide nitrogen on that same residue
-        kwargs['atom_name'] = 'N'
-        print(kwargs)
-        n_ser_num = select(info_table, **kwargs)[0]
-
-        # and the carboxyl carbon on the same residue
-        kwargs['atom_name'] = 'C'
-        c_ser_num = select(info_table, **kwargs)[0]
-
-        # save so we can add back later after rotation
-        start_ca_position = coordinates[ca].copy()
         print(
-            f'for our selected residue, the starting '
-            f'C alpha position vector is:\n{start_ca_position}')
-        print(find_rotation_angle(coordinates,
-              info_table, angle_type, angle, **kwargs))
+            f'for the alpha carbon serial number {ca} ~~~~~~~~~~~~~~~~~~~~~~\n')
+        backbone_sn_groups = get_dihedral_backbones(info_table, [ca])
+        print(
+            f"relevant backbone atom serial numbers are {backbone_sn_groups}")
 
-    if False:
-        # ############################     PHI    ###################################
-        #     if angle_type == 'phi':
-        #         # print('Entering get_phi_psi for phi\n\n')
-        #         current_phi = info_table[ca]['phi']
+        for bb_sn in backbone_sn_groups:
+            # if phi was there was a prev residue and phi was
+            # the selected angle
+            if bb_sn[0] is not None and angle_type == 'phi':
+                # and it is not a proline
+                if info_table[bb_sn[2]]['res_name'] != 'PRO':
+                    center = coordinates[bb_sn[2]].copy()
 
-        #         # if the angle hasn't been calculated yet for this residue,
-        #         # (try) to do so
-        #         if math.isnan(current_phi):
+                    # after centering on alpha carbon this now defines the axis
+                    # of rotation
+                    amide = coordinates[bb_sn[1]] - center
 
-        #             # kwargs.pop('debug_mode', False)
+                    # we select the atoms that need to have the transformation
+                    # applied to them
+                    rotation_segment = isolate_segment(
+                        info_table, bb_sn[1], anchor)
+                    print(
+                        f"given an anchor of {anchor} our set of rotating atom serial numbers is {rotation_segment}")
+                    rot_ang = find_rotation_angle(angle, bb_sn[2])
+                    for ser_num in rotation_segment:
+                        # print(
+                        #     f"To start we have {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} whose coordinates are {coordinates[ser_num]}")
+                        coordinates[ser_num] -= center
+                        # print(
+                        #     f"When the alpha carbon coordinates {center} are subtracted from {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
+                        coordinates[ser_num] = coordinates[ser_num].rotate_arround(
+                            rot_ang, amide)
+                        # print(
+                        #     f"When rotated arround the amide, {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
+                        coordinates[ser_num] += center
+                        # print(
+                        #     f"When the alpha carbon coordinates {center} are added back to {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
 
-        #             get_phi_psi(coordinates, info_table, **kwargs)
-        #             current_phi = info_table[ca]['phi']
-        #             if debug_mode:
-        #                 print("current phi for residue "
-        #                       f"{info_table[ca]['res_num']} of chain "
-        #                       f"{info_table[ca]['chain']} at atom "
-        #                       f"{info_table[ca]['atom_name']}"
-        #                       f" is {info_table[ca]['phi']}")
+                    get_phi_psi(coordinates, info_table, **kwargs)
+                    print(
+                        f"this gives us a phi of {info_table[bb_sn[2]]['phi']}")
+            elif bb_sn[4] is not None and angle_type == 'psi':
+                # if we specified psi and there an amide at N +1 (ie not c term)
+                center = coordinates[bb_sn[2]].copy()
 
-        #         if info_table[ca]['res_name'] != 'PRO' and \
-        #                 math.isnan(current_phi) is False:
+                # after centering on alpha carbon this now defines the axis
+                # of rotation
+                carboxyl = coordinates[bb_sn[3]] - center
 
-        #             # we can't rotate the phi bond on a proline or for 1st residue,
-        #             # so check to make sure it isn't one of these
-        #             rotate_by = (angle - current_phi)
+                # we select the atoms that need to have the transformation
+                # applied to them, based on carboxyl
+                rotation_segment = isolate_segment(
+                    info_table, bb_sn[3], anchor)
+                print(
+                    f"given an anchor of {anchor} our set of rotating atom serial numbers is {rotation_segment}")
+                rot_ang = find_rotation_angle(angle, bb_sn[2])
+                for ser_num in rotation_segment:
+                    # print(
+                    #     f"To start we have {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} whose coordinates are {coordinates[ser_num]}")
+                    coordinates[ser_num] -= center
+                    # print(
+                    #     f"When the alpha carbon coordinates {center} are subtracted from {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
+                    coordinates[ser_num] = coordinates[ser_num].rotate_arround(
+                        rot_ang, carboxyl)
+                    # print(
+                    #     f"When rotated arround the amide, {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
+                    coordinates[ser_num] += center
+                    # print(
+                    #     f"When the alpha carbon coordinates {center} are added back to {info_table[ser_num]['atom_name']} {info_table[ser_num]['res_name']} {info_table[ser_num]['res_num']}, chain {info_table[ser_num]['chain']} the new coordinates are {coordinates[ser_num]}")
 
-        #             # find the difference between the desired phi angle and current
-        #             # phi angle in
-        #             # degrees
-
-        #             if anchor == 'N':
-
-        #                 ###########################################################
-        #                 # the last atom on our subset that is on the same chain.
-        #                 # Note that this assumes that atoms are listed in order n
-        #                 # to c terminus as is pdb convention we need all this to
-        #                 # know what the range of serial numbers to apply the
-        #                 # rotation to will be. Each time we do a rotation, we only
-        #                 # want to rotate residues on the same model, submodel, and
-        #                 # chain that are either n terminal (with c anchor, in which
-        #                 # case all serial numbers up to ours) or c terminal
-        #                 # (with n anchor, in which case starting with ours up to
-        #                 # the last on this subset)
-        #                 ###########################################################
-
-        #                 end_pt = ser_nums_on_same_chain[-1]
-        #                 # if debug_mode:
-
-        #                 #     print(f"same chain atoms are {ser_nums_on_same_chain}")
-        #                 #     print("the last atom on the same chain as ours is "
-        #                 #           f"{info_table[end_pt]['atom_name']} on "
-        #                 #           f"{info_table[end_pt]['res_num']} "
-        #                 #           f"{info_table[end_pt]['res_name']} of chain "
-        #                 #           f"{info_table[end_pt]['chain']}")
-        #                 #     print(f"Before recentering, the coordinates are"
-        #                 #           f":\n{coordinates[n_ser_num:end_pt + 1, :]}")
-
-        #                 # center the origin on the alpha carbon only for the
-        #                 # rotating subset. note that this assumes that atoms are
-        #                 # listed in order n to c terminus as is pdb convention.
-        #                 coordinates[n_ser_num:end_pt + 1, :] -= start_ca_position
-
-        #                 # if debug_mode:
-        #                 #     print(f"after recentering, the coordinates are:\n"
-        #                 #           f"{coordinates[n_ser_num:end_pt + 1, :]}")
-
-        #                 # the n coordinate on the same residue now defines the
-        #                 # vector for the bond ca to n
-        #                 n_coord = coordinates[n_ser_num]
-        #                 CA_to_N_bond_vect = n_coord.unitize()
-
-        #                 if debug_mode:
-        #                     print(f"Applying rotation matrix: The rotation angle is"
-        #                           f"{angle} - {current_phi} which is {rotate_by}"
-        #                           f"\nThe axis of rotation is the normalized "
-        #                           f"CA to N bond vector:\n{CA_to_N_bond_vect}")
-
-        #                 # when the vector is unitized this defines our
-        #                 # axis of rotation, which is ca to n
-
-        #                 for n, vect in enumerate(coordinates[n_ser_num: end_pt + 1, :]):
-        #                     coordinates[(n_ser_num + n), :] = vect.rotate_arround(
-        #                         rotate_by, CA_to_N_bond_vect)
-
-        #                 # if debug_mode:
-        #                 #     print(f'the result of said rotation is:'
-        #                 #           f'\n{coordinates[n_ser_num:(end_pt + 1)]}')
-
-        #                 for n, vect in enumerate(coordinates[n_ser_num: end_pt+1, :]):
-        #                     coordinates[(n_ser_num + n), :] = vect + \
-        #                         start_ca_position
-        #                 # print(
-        #                 #     'Adding back the starting c alpha coordinates of the '
-        #                 #     f'rotation center:\n{coordinates[n_ser_num:(end_pt +1)]}')
-
-        #             elif anchor == 'C':
-
-        #                 # get the first atom serial number that is on the same
-        #                 # model, submodel, and chain
-        #                 start_pt = ser_nums_on_same_chain[0]
-
-        #                 # if debug_mode:
-        #                 #     print(f"same chain atoms are {ser_nums_on_same_chain}")
-        #                 #     print("the first atom on the same chain as ours is "
-        #                 #           f"{info_table[start_pt]['atom_name']} on "
-        #                 #           f"{info_table[start_pt]['res_num']} "
-        #                 #           f"{info_table[start_pt]['res_name']} of chain "
-        #                 #           f"{info_table[start_pt]['chain']}")
-
-        #                 # center the origin on the alpha carbon only for the
-        #                 # rotating subset. note that this assumes that atoms are
-        #                 # listed in order n to c terminus as is pdb convention.
-        #                 coordinates[start_pt:ca + 1, :] -= start_ca_position
-
-        #                 # when the vector is reversed and unitized this defines our
-        #                 # axis of rotation, which is n to ca
-        #                 n_coord = coordinates[n_ser_num]
-        #                 CA_to_N_bond_vect = n_coord.unitize()
-
-        #                 for n, vect in enumerate(coordinates[start_pt:ca, :]):
-        #                     coordinates[(start_pt + n), :] = vect.rotate_arround(
-        #                         rotate_by, CA_to_N_bond_vect)
-
-        #                 coordinates[start_pt:ca + 1] += start_ca_position
-
-        #             else:
-        #                 raise ValueError(
-        #                     'the 5th positional argument for set_phi_psi must be '
-        #                     'either N or C, if none is given N is taken as the '
-        #                     'default')
-
-        #             if debug_mode:
-        #                 get_phi_psi(coordinates, info_table)
-        #                 print('set_phi_psi: after performing rotation, phi for '
-        #                       f"residue {info_table[ca]['res_num']} of chain "
-        #                       f"{info_table[ca]['chain']} at atom "
-        #                       f"{info_table[ca]['atom_name']}"
-        #                       f" is {info_table[ca]['phi']*180/np.pi} degrees")
-
-        #         else:
-        #             rn = info_table[ca]['res_num']
-        #             c = info_table[ca]['chain']
-        #             raise ValueError(f'Warning: the phi value for residue {rn}'
-        #                              f' on chain {c} can not be set because it is'
-        #                              ' either a proline or the n-terminus.'
-        #                              ' The request was ignored.')
-
-        # ############################     PSI     ##################################
-
-        #     elif angle_type == 'psi':
-
-        #         # if the angle hasn't been calculated yet for this residue,
-        #         # do so
-        #         current_psi = info_table[ca]['psi']
-        #         if math.isnan(current_psi):
-
-        #             kwargs.pop('debug_mode', False)
-        #             # print('Entering get_phi_psi for psi\n\n')
-        #             get_phi_psi(coordinates, info_table, **kwargs)
-        #             current_psi = info_table[ca]['psi']
-
-        #             if debug_mode:
-
-        #                 print("set_phi_psi: before rotation psi for residue "
-        #                       f"{info_table[ca]['res_num']} of chain "
-        #                       f"{info_table[ca]['chain']} at atom "
-        #                       f"{info_table[ca]['atom_name']}"
-        #                       f" is {info_table[ca]['psi']*180/np.pi} degrees")
-
-        #         if math.isnan(current_psi) is False:
-
-        #             # we can't rotate the psi bond for the last residue, so check
-        #             # to make sure it isn't
-
-        #             rotate_by = (angle - current_psi)
-        #             # find the difference between the desired psi angle and
-        #             # current psi angle in degrees
-
-        #             if anchor == 'N':
-        #                 end_pt = ser_nums_on_same_chain[-1]
-        #                 # the last atom on our subset that is on the same chain.
-        #                 # note that this assumes that atoms are listed in order
-        #                 # n to c terminus as is pdb convention
-
-        #                 # if debug_mode:
-        #                 #     print(f"same chain atoms are {ser_nums_on_same_chain}")
-        #                 #     print("the last atom on the same chain as ours is "
-        #                 #           f"{info_table[end_pt]['atom_name']} on "
-        #                 #           f"{info_table[end_pt]['res_num']} "
-        #                 #           f"{info_table[end_pt]['res_name']} of chain "
-        #                 #           f"{info_table[end_pt]['chain']}")
-        #                 for n, vect in enumerate(coordinates[ca: end_pt + 1, :]):
-
-        #                     coordinates[(ca + n), :] = vect - start_ca_position
-
-        #                 # if debug_mode:
-        #                 #     print(f"after recentering, the coordinates are:\n"
-        #                 #           f"{coordinates[n_ser_num:end_pt + 1, :]}")
-
-        #                 # center the origin on the alpha carbon only for the
-        #                 # rotating subset. note that this assumes that atoms are
-        #                 # listed in order n to c terminus as is pdb convention.
-        #                 c_coord = coordinates[c_ser_num]
-        #                 # the c coordinate on the same residue now defines the
-        #                 # vector for the bond ca to c
-        #                 CAC_bond_vect = -1*c_coord.unitize()
-        #                 # if debug_mode:
-        #                 #     print(f"Applying rotation matrix. the angle is"
-        #                 #           f"{angle} - {current_psi} which is {rotate_by}"
-        #                 #           f"\nThe axis of rotation is the normalized "
-        #                 #           f"CAC bond vector:\n{CAC_bond_vect}")
-
-        #                 # when the vector is r unitized this defines our axis of
-        #                 # rotation, which is ca to c
-        #                 s = coordinates[c_ser_num: end_pt + 1, :]
-        #                 for n, vect in enumerate(s):
-        #                     coordinates[(c_ser_num + n), :] = \
-        #                         vect.rotate_arround(rotate_by, CAC_bond_vect)
-
-        #                 for n, vect in enumerate(coordinates[ca: end_pt + 1, :]):
-        #                     coordinates[(ca + n), :] = vect + start_ca_position
-
-        #             elif anchor == 'C':
-
-        #                 start_pt = ser_nums_on_same_chain[0]
-        #                 # if debug_mode:
-        #                 #     print(f"same chain atoms are {ser_nums_on_same_chain}")
-        #                 #     print("the first atom on the same chain as ours is "
-        #                 #           f"{info_table[start_pt]['atom_name']} on "
-        #                 #           f"{info_table[start_pt]['res_num']} "
-        #                 #           f"{info_table[start_pt]['res_name']} of chain "
-        #                 #           f"{info_table[start_pt]['chain']}")
-
-        #                 # get the first atom serial number that is on the same
-        #                 # model, submodel, and chain
-
-        #                 coordinates[start_pt:c_ser_num+1, :] -= start_ca_position
-        #                 # center the origin on the alpha carbon only for the
-        #                 # rotating subset. note that this assumes that atoms are
-        #                 # listed in order n to c terminus as is pdb convention.
-        #                 c_coord = coordinates[c_ser_num]
-        #                 CAC_bond_vect = c_coord.unitize()
-        #                 # when the vector is unitized this defines our axis of
-        #                 # rotation, which is ca to n
-        #                 for n, vect in enumerate(coordinates[start_pt:
-        #                                                      c_ser_num + 1, :]):
-        #                     coordinates[(start_pt + n), :] = \
-        #                         vect.rotate_arround(rotate_by, CAC_bond_vect)
-        #                 coordinates[start_pt:c_ser_num + 1] += start_ca_position
-
-        #             else:
-        #                 raise ValueError(
-        #                     'the 5th positional argument for set_phi_psi must be '
-        #                     'either N or C, if none is given N is taken as the '
-        #                     'default')
-        #             if debug_mode:
-        #                 get_phi_psi(coordinates, info_table)
-        #                 print('set_phi_psi: after performing rotation, psi for '
-        #                       f"residue {info_table[ca]['res_num']} of chain "
-        #                       f"{info_table[ca]['chain']} at atom "
-        #                       f"{info_table[ca]['atom_name']}"
-        #                       f" is {info_table[ca]['psi']*180/np.pi} degrees")
-
-        #         else:
-        #             rn = info_table[ca]['res_num']
-        #             c = info_table[ca]['chain']
-        #             raise ValueError(f'Warning: the psi value for residue {rn}'
-        #                              f' on chain {c} can not be set because it is'
-        #                              ' at the c-terminus. The request was'
-        #                              ' ignored.')
-        #     else:
-        #         raise ValueError(
-        #             f'Warning: the dihedral angle type "{repr(angle_type)}" is '
-        #             'not a valid selection. It must be either phi or psi. If '
-        #             'none is given, phi is default')
-        # get_phi_psi(coordinates, info_table, **kwargs)
-        pass
+                get_phi_psi(coordinates, info_table, **kwargs)
+                print(
+                    f"this gives us a psi of {info_table[bb_sn[2]]['psi']} ({info_table[bb_sn[2]]['psi']*180/np.pi} degrees)")
 
 
 def write_pdb(coordinates, info_table, outfile=None):
     """
+    coordinates : Array of float 64
+        the atomic coordinates of all atoms
+    info_table : list
+        list of dictionaries containing data for each coordinate
     Output a pdb text file of all currently loaded models with a default
     filename if none is given
 
@@ -1114,8 +823,10 @@ def write_pdb(coordinates, info_table, outfile=None):
     f.close()
 
 
-def ramachandran(info_table):
-    get_phi_psi()
+def ramachandran(coordinates, info_table):
+
+    # !!! currently not working will fix later
+    get_phi_psi(coordinates, info_table)
     alpha_carbons = select(info_table, atom_name='CA')
     phis = []
     psis = []
@@ -1124,6 +835,7 @@ def ramachandran(info_table):
         phis.append(info_table[res]['phi'])
         psis.append(info_table[res]['psi'])
         res_nums.append(info_table[res]['res_num'])
+    print(phis)
     return mpl.pyplot.scatter(phis, psis)
 
 
@@ -1337,45 +1049,6 @@ def check_internal_clash(coordinates, info_table, cutoff_distance=0.36,
         return clash_sn
     else:
         return []
-    # clash_atom_ser_nums = []
-    # search_list = []
-    # for r in info_table:
-    #     search_list.append(r['ser_num'])
-
-    # if anchor == 'N':
-
-    #     # remove the c-terminal fragment from the searchlist
-    #     # so it doesn't search against itself
-    #     for atom in c_term_frag:
-    #         search_list.remove(atom)
-    #     # then search each atom in the fragment against every atom not a part
-    #     # of that fragment
-    #     for atom in c_term_frag:
-    #         for query in search_list:
-    #             dist = coordinates[atom].distance_between(coordinates[query])
-    #             if dist < cutoff_distance:
-    #                 clash_atom_ser_nums.append([atom, query])
-
-    # elif anchor == 'C':
-
-    #     # remove the c-terminal fragment from searchlist
-    #     # so it doesn't search against itself
-    #     for atom in n_term_frag:
-    #         search_list.remove(atom)
-    #     # then search each atom in the fragment against every atom not a part
-    #     # of that fragment
-    #     for atom in n_term_frag:
-    #         for query in search_list:
-    #             dist = coordinates[atom].distance_between(coordinates[query])
-    #             if dist < cutoff_distance:
-    #                 clash_atom_ser_nums.append([atom, query])
-
-    # else:
-    #     raise ValueError
-    #     print(
-    #         f'{anchor} is not a valid input for parameter anchor. Enter '
-    #         f'either N or C')
-    # return clash_atom_ser_nums
 
 
 def check_external_clash(coordinates, info_table, ser_nums_a, ser_nums_b, cutoff_distance=0.36):
@@ -1423,12 +1096,12 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     f = open(residue_list_filename, 'r')
     residue_list = f.readlines()
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!! this processes correctly and sets up the anchored and free segments
-# !!!! right but doesn't seem to change the phi and psi angles
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!! this processes correctly and sets up the anchored and free segments
+    # !!!! right but doesn't seem to change the phi and psi angles
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # !!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # change it to accept input file format that include the chain along with
@@ -1546,10 +1219,10 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
     # whittle away the anchored residues from the list to iterate
     # over when randomizing angles
-    free_residues = [[s for s in sn_set if s not in anchored_residues]
-                     for sn_set in free_residues]
+    free_residues = [[s for s in sn_set if s not in anchored_residues and s
+                      not in fixed_residues] for sn_set in free_residues]
 
-    print(f'after set comprehension, the free residues are\n{free_residues}')
+    # print(f'after set comprehension, the free residues are\n{free_residues}')
 
     # if an anchor section exists, all residues before it are anchored at
     # C term and all residues after are anchored at N term
@@ -1566,9 +1239,9 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
         # !!! in the future change this to a list containing minima for each
         # !!! chain segment of anchored residues
         n_anchor = min(anchored_residues)
-        print(f'the n anchor is {n_anchor}')
+        # print(f'the n anchor is {n_anchor}')
         c_anchor = max(anchored_residues)
-        print(f'the c anchor is {c_anchor}')
+        # print(f'the c anchor is {c_anchor}')
     # if an anchored segment exists, the free residues are split into those on
     # the n_terminal side of it (c_anchored) or the c terminal side
     # (n_anchored)
@@ -1595,29 +1268,29 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                 # then put it in reverse order so that rotation iterates from C
                 # towards n terminus
 
-                print(f' the {i}th set of c_anchored segments is {seg}')
+                # print(f' the {i}th set of c_anchored segments is {seg}')
                 seg.sort(reverse=True)
                 c_anchored_segments.append(seg)
             if c_anchor is not None:
                 # repeat this for n anchored segments
                 seg = [res for res in free_residues[i] if res > c_anchor]
-                print(seg)
+                # print(seg)
                 seg.sort(reverse=False)
                 n_anchored_segments.append(seg)
         # print(f'the nterm seg is\n{c_anchored_segments}\nthe c term seg '
-             # f'is\n{n_anchored_segments}')
-    print(f'there are {len(c_anchored_segments)} c anchored segments')
-    print(f'there are {len(c_anchored_segments)} n anchored segments')
-    print(f'there are {len(chainlist)} chain segments')
+              # f'is\n{n_anchored_segments}')
+    # print(f'there are {len(c_anchored_segments)} c anchored segments')
+    # print(f'there are {len(c_anchored_segments)} n anchored segments')
+    # print(f'there are {len(chainlist)} chain segments')
     if len(c_anchored_segments) != len(n_anchored_segments) and \
             len(free_residues) != len(chainlist):
         raise ValueError('the number of lists in c_anchored_segments, '
                          'n_anchored_segments and the number of items in '
                          'chainlist must all be equal')
 
-    print(f'the chain in this selection are\n{chainlist}\n')
-    print(f'the C-anchored segments for each chain are {c_anchored_segments}')
-    print(f'the N-anchored segments for each chain are {n_anchored_segments}')
+    # print(f'the chain in this selection are\n{chainlist}\n')
+    # print(f'the C-anchored segments for each chain are {c_anchored_segments}')
+    # print(f'the N-anchored segments for each chain are {n_anchored_segments}')
     # loop the generation for each of the n_structs you want to generate
     for ndx in range(0, n_structs):
         for i in range(len(c_anchored_segments)):
@@ -1639,7 +1312,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                 coordinates, info_table, cutoff_distance,
                                 angle_type='phi', anchor='C', res_num=num,
                                 chain=chainlist[i]) != []
-                               and tries < max_tries):
+                                and tries < max_tries):
 
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1706,7 +1379,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                                     anchor='N',
                                                     res_num=num,
                                                     chain=chainlist[i]) != []
-                               and tries < 20):
+                                and tries < 20):
 
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1738,7 +1411,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                                     anchor='N',
                                                     res_num=num,
                                                     chain=chainlist[i]) != []
-                               and tries < 20):
+                                and tries < 20):
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='psi', anchor='N',
@@ -1768,6 +1441,10 @@ def orient(coordinates, info_table, center_sn, axis_sn):
 
     Parameters
     ----------
+    coordinates : Array of float 64
+        the atomic coordinates of all atoms
+    info_table : list
+        list of dictionaries containing data for each coordinate
     center_sn : int
         serial number of the atom which is to be centered at [0 0 0]
     allignment_sn : int
@@ -2070,4 +1747,4 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
 # axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
 # over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
 
-coordinates, info_table = import_pdb('simple.pdb')
+coordinates, info_table = import_pdb('test.pdb')
