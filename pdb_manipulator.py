@@ -20,6 +20,7 @@ import numpy as np
 import multiprocessing
 import math
 from scipy.special import comb
+from scipy.spatial import cKDTree
 
 
 class vector (np.ndarray):
@@ -91,7 +92,6 @@ class vector (np.ndarray):
         # rotate a 2d or a 3d vector arround another 2d or 3d vector by the
         # given angle according to right hand rule. intentionally
         # not defined for vectors of rank 4 or greater
-
         if len(axis_vector) != 0:
             if axis_vector.is_nonzero() is True:
                 axis_vector = axis_vector.unitize()
@@ -187,7 +187,8 @@ def import_pdb(fname=None):
                         'submodel': a_tuple[1], 'chain': a_tuple[2],
                         'res_num': a_tuple[3][1], 'res_name':
                         residue.get_resname(), 'atom_name': a_tuple[4][0],
-                        'phi': float('nan'), 'psi': float('nan')
+                        'phi': float('nan'), 'psi': float('nan'),
+                        'omega': float('nan')
                     }
                     # the last 2 are empty fields where phi & psi are assigned
 
@@ -282,9 +283,9 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
         info_table : list of dictionaries
 
         anchor : string
-            which side of a chain to hold static, atoms on that side of the 
-            atom_sn will not have serial numbers returned in the list. 
-            Valid input is 'N' or 'C'. Default is 'N'. 
+            which side of a chain to hold static, atoms on that side of the
+            atom_sn will not have serial numbers returned in the list.
+            Valid input is 'N' or 'C'. Default is 'N'.
 
         atom_sn : Int
             the serial number of an atom directly bonded to another with no
@@ -292,7 +293,7 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
 
         Returns
         -------
-        segment_ser_num : list of int. 
+        segment_ser_num : list of int.
 
     '''
 
@@ -311,7 +312,9 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
         kwargs['res_num'] = info_table[atom_sn]['res_num']
         k = kwargs['res_num']
         cur_res = [sn for sn in same_chain_atms if info_table[sn]['res_num'] == k]
-        print(cur_res)
+        same_chain_cur_res_ndx = [same_chain_atms.index(
+            sn) for sn in same_chain_atms if info_table[sn]['res_num'] == k]
+
         # for i in same_chain_atms:
         #     print(info_table[i])
 
@@ -347,31 +350,38 @@ def isolate_segment(info_table, atom_sn, anchor='N'):
                     return same_chain_atms[next_amide:] + amide_excluded
                 else:
                     return amide_excluded
+                    print('reached the n terminus -----\n\n\n')
 
         else:
 
-            if atom_name == 'C':  # grab everthing carboxyl forward including oxygen
+            if atom_name == 'C':  # grab everthing after carbonyl including oxygen
 
-                # if carboxyl O is there, it will right after the C. include it.
-                if info_table[atom_sn+1]['atom_name'] == 'O':
-                    carboxyl = [atom_sn, atom_sn+1]
-                else:
-                    carboxyl = [atom_sn]
                 next_res = kwargs['res_num'] + 1
+                # if carboxyl O is there, it will right after the C.
+                # include it.
+                if info_table[atom_sn+1]['atom_name'] == 'O':
+                    oxy = [atom_sn+1]
                 next_amide = [sn for sn in same_chain_atms if (info_table[sn]
                               ['res_num'] == next_res and
                               info_table[sn]['atom_name'] == 'N')]
-                if next_amide is not None:
-                    return same_chain_atms[next_amide[0]:] + carboxyl
+                if next_amide != []:
+                    try:
+                        return same_chain_atms[next_amide[0]:] + oxy
+                    except:
+                        return same_chain_atms[next_amide[0]:]
                 else:
                     raise ValueError
 
-            else:  # grab every residue before + the amide hydrogen and nitro
-                amide = [sn for sn in cur_res if info_table[sn]['atom_name']
-                         in ['N', 'H']]
-                cur_n = min(amide)  # current N will be before the amide hydro
-                return same_chain_atms[0:cur_n] + amide
+            else:  # grab every residue before + the amide hydrogen
 
+                cur_n = same_chain_atms.index(min(cur_res))
+                cur_h = [same_chain_atms.index(
+                    sn) for sn in cur_res if info_table[sn]['atom_name'] == 'H']
+
+                if cur_h != []:
+                    return same_chain_atms[0:cur_n] + cur_h
+                else:
+                    return same_chain_atms[0:cur_n]
     else:
         # in the future I will implement a way to directly manipulate side
         # chain rotamers but not now
@@ -394,12 +404,12 @@ def measure_dihedral(set_of_points, **kwargs):
     Rturn the angle between plane ABC and plane BCD relative to the axis of
     rotation. The dihedral angle is the arccosine of the dot products of the
     normal vectors of this plane. the sign of the cross product bweteen the
-    normal vectors determines if the angle is positive or negative relative 
+    normal vectors determines if the angle is positive or negative relative
     to the axis of rotation
 
     Parameters
     ----------
-    set_of_points : list of exactly four R3 vectors which must be connected 
+    set_of_points : list of exactly four R3 vectors which must be connected
     in the arrangement seen below
       B ____ C
      /********\
@@ -418,7 +428,7 @@ def measure_dihedral(set_of_points, **kwargs):
     b_to_c = set_of_points[2] - set_of_points[1]
     b_to_d = set_of_points[3] - set_of_points[1]
     rotation_axis = -b_to_c
-
+    # print(a_to_b, '\n', a_to_c, '\n', b_to_c, '\n', b_to_d, '\n\n')
     c_to_d = set_of_points[3] - set_of_points[2]
 
     normal_plane1 = vector(np.cross(a_to_b, a_to_c))
@@ -511,12 +521,12 @@ def get_phi_psi(coordinates, info_table, **kwargs):
                         info_table[sn]['phi'] = float('nan')
                 if group[-1] is not None:  # if there is a next residue
                     # pass last 4, reversed
-                    vects = [coordinates[sn] for sn in group[:0:-1]]
+                    vects = [coordinates[sn] for sn in group[1:]]
                     psi = measure_dihedral(vects)
-                    for sn in group[-2:0:-1]:
+                    for sn in group[1:-1]:
                         info_table[sn]['psi'] = psi
                 else:  # else psi is NaN
-                    for sn in group[-2:0:-1]:
+                    for sn in group[1:-1]:
                         info_table[sn]['psi'] = float('nan')
 
     # ------------- mode 2, parse kwargs and find phi/psi for all matches
@@ -547,7 +557,7 @@ def get_phi_psi(coordinates, info_table, **kwargs):
 
             if isinstance(specified_residues, int):
                 specified_residues = [specified_residues]
-                print(f'specified residues are {specified_residues}')
+
         else:
             specified_residues = None
 
@@ -604,14 +614,14 @@ def get_phi_psi(coordinates, info_table, **kwargs):
                         info_table[sn]['phi'] = float('nan')
                 if group[-1] is not None:  # if there is a next residue
                     # pass last 4, reversed
-                    vects = [coordinates[sn] for sn in group[:0:-1]]
+                    vects = [coordinates[sn] for sn in group[1:]]
                     psi = measure_dihedral(vects)
-                    for sn in group[-2:0:-1]:
+                    for sn in group[1:-1]:
                         # print(sn)
                         # print('can assign psi')
                         info_table[sn]['psi'] = psi
                 else:  # else psi is NaN
-                    for sn in group[-2:0:-1]:
+                    for sn in group[1:-1]:
                         # print(sn)
                         info_table[sn]['psi'] = float('nan')
 
@@ -620,7 +630,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                 **kwargs):
     """
     Rotate everything in the coordinates matrix so that the residue given has a
-    phi or a psi angle as specified, with the angle specified in degrees by the
+    phi or a psi angle as specified, with the angle specified in radians by the
     angle parameter. Which end will be held static while the other is rotated
     is specified by the anchor parameter
     """
@@ -675,8 +685,8 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
         if math.isnan(current_angle):
             return None
         else:
-            print(f"find_rotation_angle: {target_angle - current_angle}"
-                  f" ({(target_angle - current_angle)*180/np.pi} degrees)")
+            # print(f"find_rotation_angle: {target_angle - current_angle}"
+            #       f" ({(target_angle - current_angle)*180/np.pi} degrees)")
             return (target_angle - current_angle)
 
     if 'debug_mode' in kwargs:
@@ -698,6 +708,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
     # if a serial number for an atom is passed, instead refer to the residue
     # number that that atom is on
 
+    # print(f'the kwargs after processing for set_phi_psi are {kwargs}')
     kwargs['atom_name'] = 'CA'
     # if an atom name was specified ignore it
     # and search for 'CA'
@@ -707,6 +718,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
     for ndx, ca in enumerate(ca_ser_nums):
 
         backbone_sn_groups = get_dihedral_backbones(info_table, [ca])
+        # print(f'the backbone atom indices for this are: {backbone_sn_groups}')
         for bb_sn in backbone_sn_groups:
 
             # bb_sn is a gorup of backbone serial numbers for a given residue
@@ -716,7 +728,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
             # if phi was there was a prev residue and phi was
             # the selected angle
             if bb_sn[0] is not None and angle_type == 'phi':
-                # and it is not a proline
+                # print(info_table[bb_sn[2]])
                 if info_table[bb_sn[2]]['res_name'] != 'PRO':
                     center = coordinates[bb_sn[2]].copy()
                     # after centering on alpha carbon this now defines the axis
@@ -727,11 +739,13 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     # applied to them
                     rotation_segment = isolate_segment(
                         info_table, bb_sn[1], anchor)
+                    # print(rotation_segment)
                     rot_ang = find_rotation_angle(angle, bb_sn[2])
                     for ser_num in rotation_segment:
                         coordinates[ser_num] -= center
+
                         coordinates[ser_num] = coordinates[ser_num].rotate_arround(
-                            rot_ang, amide)
+                            rot_ang, -amide)
                         coordinates[ser_num] += center
 
                     get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
@@ -757,10 +771,61 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     # correctly, you need to reverse the sign on the rotation
                     # for psi
                     coordinates[ser_num] = coordinates[ser_num].rotate_arround(
-                        -rot_ang, carboxyl)
+                        -rot_ang, -carboxyl)
                     coordinates[ser_num] += center
 
             get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
+            # --------------------- Omega ----------------
+
+            if bb_sn[4] is not None and angle_type == 'omega':
+
+                # if we specified omega and we are not at c term
+
+                # !!!---------Note: this is not elegant -----------------
+                # rewrite later to generalize this by extending bb_sn to 6
+                # elements that includes the next CA instead of reselcting
+                # again inside this code block
+
+                # get all the info for the last element (the next amine)
+                next_res = info_table[bb_sn[4]]['res_num']
+                c = info_table[bb_sn[2]]['chain']
+                smod = info_table[bb_sn[2]]['submodel']
+                mod = info_table[bb_sn[2]]['model_name']
+                # use it to find the next c_alpha
+
+                next_ca = select(info_table, res_num=next_res,
+                                 chain=c, submodel=smod, model_name=mod,
+                                 atom_name='CA')
+                vects = [coordinates[bb_sn[2]], coordinates[bb_sn[3]], coordinates[bb_sn[4]],
+                         coordinates[next_ca[0]]]
+                rot_ang = angle - measure_dihedral(vects)
+
+                # for omega the carboyl is the center
+                # we select the atoms that need to have the transformation
+                # applied to them, based on carboxyl to N bond
+                rotation_segment = isolate_segment(
+                    info_table, bb_sn[4], anchor)
+
+                # !!! also update find rotation angle to handle arbitrary
+                # dihedrals instead of manually recalculating here
+                carboxyl = coordinates[bb_sn[3]].copy()
+                next_n = coordinates[bb_sn[4]].copy() - carboxyl
+
+                for ser_num in rotation_segment:
+
+                    coordinates[ser_num] -= carboxyl
+
+                    # for some reason, even though the axis was defined
+                    # correctly, you need to reverse the sign on the rotation
+                    coordinates[ser_num] = coordinates[ser_num].rotate_arround(
+                        rot_ang, -next_n)
+                    coordinates[ser_num] += carboxyl
+                # NOTE this assumes that there was no problem setting this
+                # angle, and doesn't actually measure and check
+                for s in bb_sn[1:4]:
+                    info_table[s]['omega'] = measure_dihedral(vects)
+                # print(
+                #     f"omega for residue {next_res -1} = {info_table[s]['omega']}")
 
 
 def write_pdb(coordinates, info_table, outfile=None):
@@ -889,216 +954,120 @@ def ramachandran(coordinates, info_table):
     return mpl.pyplot.scatter(phis, psis)
 
 
-def is_clashing(coordinates, search_set_indices, threshold):
+# this inner function will divide up the pairwise search by a divide and
+# conquer multiprocessing algorithm to make it faster. if any of the
+# subprocesses halt, each is terminated.
+def pairwise_search(pair, threshold, terminate_event):
     '''
-    this will perform distance measurements for all coordinates contained in
-    each of the lists inside search_set_indices against all coordinates in
-    the other sublists (not those in the same sublist). If it encounters a
-    distance less than the threshold, it will stop execution and return the
-    threshold pair of indices.
+        given a pair of serial numbers, search in paralell until you find a pair with
+        distance less than threshold
 
-    Parameters
-    ----------
-    coordinates : array of vectors
-        the entire set of mulecular coordinates
-    search_set_indices : list
-        a list containing at least 2 lists  which each contain the indices of
-        a set of coordinates to checked against all members of all other sets
-        in the top list.
+        Parameters
+        ----------
+        pairs : list of 2 integers
+            pair of serial numbers whose coordinates will be searched
+        threshold : Float64
+            distance threshold
+        terminate_event : multiprocessing.event
+            signals termination of other threads if clash detected
 
+        Returns
+        -------
+        None.
 
-    Returns
-    -------
-    results : TYPE
-        DESCRIPTION.
+        '''
 
-    '''
+    # print('top of pairwise search')
 
-    # this inner function will divide up the pairwise search by a divide and
-    # conquer multiprocessing algorithm to make it faster. if any of the
-    # subprocesses halt, each is terminated.
-    def parallel_search(ndx_list_a, ndx_list_b, threshold, terminate_event):
-        results = multiprocessing.Queue()
-
-        def pairwise_search():
-            # print('top of pairwise search')
-            for i in range(len(ndx_list_a)):
-                for j in range(len(ndx_list_b)):
-                    # print(
-                    #     f'comparing against the {j} element of the'
-                    #     'second group')
-                    if terminate_event.is_set():
-                        # print('aborting')
-                        # if this or any other subprocess sent term signal
-                        # just abort
-                        return None
-                    # print(ndx_list_a[i], ndx_list_b[j])
-                    dist = coordinates[ndx_list_a[i]].distance_between(
-                        coordinates[ndx_list_b[j]])
-                    if dist < threshold:
-                        # print('clash detected')
-                        # Put the result into the queue created by the
-                        # calling function
-                        results.put([ndx_list_a[i], ndx_list_b[j]])
-                        # then set the event variable
-                        # to tell each subprocess to stop
-                        terminate_event.set()
-                        return None
-
-        with multiprocessing.Pool() as pool:
-            for i in range(len(ndx_list_a)):
-                # print(
-                #     f'in the {i}th element of the first coord set'
-                #     ' starting async')
-                pool.apply_async(
-                    pairwise_search())
-        pool.close()
-        pool.join()
-        return results
-
-    if threshold is not None:
-
-        terminate_event = multiprocessing.Event()
-
-        # list all possible combinations of coordinate set pairs to be searched
-        # against each other without redundancy
-
-        # for the unique pairs search every element of the first against
-        # every element of the second
-        for pair in itertools.combinations(search_set_indices, 2):
-            # print(pair)
-            halt_indices = parallel_search(pair[0], pair[1], threshold,
-                                           terminate_event)
-            if not halt_indices.empty():
-                return halt_indices.get()
-        # if the function never picks up a distance below the threshold then
-        # return None
+    if terminate_event.is_set():
+        # print('aborting')
+        # if this or any other subprocess sent term signal
+        # just abort
         return None
 
+    # measure distance between the coordinates of pointed to by
+    # index pair serial numbers
+    dist = coordinates[pair[0]].distance_between(
+        coordinates[pair[1]])
+    if dist < threshold:
+        # print('clash detected')
 
-def check_clash_all(coordinates, info_table, cutoff_distance=0.36):
-    """
-    checks every atom against every other atom not directly bonded to it for
-    clashes. This is highly computationally expensive and to be avoided
-    if possible.
+        # Put the result into the queue created by the
+        # calling function
+        # then set the event variable
+        # to tell each subprocess to stop
+        terminate_event.set()
+        return pair
+
+
+def is_clashing(coordinates, search_set_indices, threshold):
+    '''
+    given 2 lists of serial numbers, return true if any pairwise combination
+    of points from coordinates associated with a serial number in A is closer
+    than threshold from any coordinate indicated by a serial number in list b
 
     Parameters
     ----------
-    cutoff_distance : TYPE, optional
-        DESCRIPTION. The default is 0.36.
+    coordinates : vector
+        all coordinates
+    search_set_indices : list of lists of integers
+        list containing exactly 2 lists each of which contains serial numbers.
+    threshold : float64
+        value below which to halt the process and report a clash.
 
     Returns
     -------
-    None.
+    bool
+        if a clash was detected.
 
-    """
+    '''
 
-    pass
+    # !!! in the future try to convert this to a heuristic kdtree algorithm
+    # which is much faster but difficult to understand and implement.
+    # right now it is brute force and ~100x slower than it could be.
+
+    # unpack the input lists
+    set_a, set_b = search_set_indices
+
+    # use the non-exhaustive but faster KDtree algorithm
+    pairs = [[a, b] for a in set_a for b in set_b]
+    for pair in pairs:
+        if (coordinates[pair[1]] -
+                coordinates[pair[0]]).get_length() < threshold:
+            return True
+    return False
 
 
-def check_internal_clash(coordinates, info_table, cutoff_distance=0.36,
-                         angle_type='phi', anchor='N', **kwargs):
-    """
-    Check if a rotation arround the phi or psi bond (default: phi) of the
-    input residue has resulted in atoms closer than the cutoff radius (in nm)
-    Return any atom serial numbers that clash. Invoke after performing
-    rotation. The cutoff distance is based on 2* the carbon vand der waals
-    radius
-    """
+# !!! in the future, I would like to change this to just take an atom
+# serial number to allow it to be more generalizable, to check all serial
+# number on one side of the atom against all others on the other side,but
+# for now it needs to fit into existing code.
 
-    # ---------------------------- CAVEATS ------------------------------------
-    # kwargs should only point to a SINGLE residue. If kwargs match atoms on
-    # multiple residues or the same residue on different chains, undefined
-    # behavior will result. I COULD write it in to check that this is the case,
-    # but it seems computationally expensive to check every time.
-    # ------------- IT IS ON THE USER TO PASS KWARGS PROPERLY -----------------
-
-    # extract the residue number from kwargs, if an atom name was specified
-    # remove it
-
-    res = kwargs.pop('res_num')
-    if 'atom_name' in kwargs.keys():
-        kwargs.pop('atom_name')
-
-    # everything to the n-terminal side of the bond will not clash with others
-    # which are also on that side of the bond. check each atom on the n
-    # terminal side with every atom that isn't n-terminal to that bond
-    # we take advantage of the fact that these should all be contiguous in
-    # memory except hydrogen on the residue in question
-
-    same_chain_atms = select(info_table, **kwargs)
-    kwargs['res_num'] = res
+def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type, anchor, **kwargs):
 
     if angle_type == 'phi':
-
-        kwargs['atom_name'] = 'N'   # get amide nitrogen
-        amide_nitrogen = select(info_table, **kwargs)
-        if len(amide_nitrogen) > 1:
-            raise ValueError
-
-        # split the chain onto the atoms on one side of the bond and those
-        # on the other side
-        n_term_frag = same_chain_atms[0: amide_nitrogen[0]+1]
-        c_term_frag = same_chain_atms[amide_nitrogen[0]+1:]
-        try:
-            kwargs['atom_name'] = 'HN'
-            amide_hydrogen = select(info_table, **kwargs)
-            n_term_frag.append(amide_hydrogen[0])
-            # add on the amide hydrogen, whose index is not contiguous with
-            # the other n-terminal atoms, if it exists and remove it from the c
-            # terminal list
-
-            c_term_frag.remove(amide_hydrogen[0])
-
-        except ValueError:
-            pass
-
-    elif angle_type == 'psi':
-
-        # select the amide carbon and oxygen from the current residue and add
-        # them to the list composed of all serial numbers from the next amide
-        # nitrogen onwards
-        kwargs['atom_name'] = 'C'
-        amide_carbon = select(info_table, **kwargs)
-
-        if len(amide_carbon) > 1:
-            raise ValueError
-
+        # get the index of the nitro of the current res
         kwargs['atom_name'] = 'N'
-        kwargs['res_num'] = res + 1
-        next_amide_nitro = select(info_table, **kwargs)
-        kwargs['res_num'] -= 1
-        n_term_frag = same_chain_atms[0: next_amide_nitro[0]]
-        c_term_frag = same_chain_atms[next_amide_nitro[0]:]
+        atom_sn = select(info_table, **kwargs)
+        if len(atom_sn) > 1:
+            raise ValueError('no more than 1 atom can be specified for segment'
+                             'isolation')
+        # print(
+        #     f"check internal: atom_sn is {atom_sn} which is {anchor} anchored and is a {info_table[atom_sn[0]]['atom_name']}\n")
+    elif angle_type == 'psi':
+        # get the index of the carbonyl of the current res
+        kwargs['atom_name'] = 'C'
+        atom_sn = select(info_table, **kwargs)
 
-        # remove the amide carbon and oxygen from n terminal side and add to
-        # c terminal side, again, because they are discontiguous
-        try:
+    # get the sets of serial numbers on the same chain on each side of
+    # a given atom. Note that the atom must be a carbonyl or amide nitrogen
+    set_a = isolate_segment(info_table, atom_sn[0])
 
-            kwargs['atom_name'] = 'C'
-            amide_carbon = select(info_table, **kwargs)
-            c_term_frag.append(amide_carbon[0])
-            n_term_frag.remove(amide_carbon[0])
-            kwargs['atom_name'] = 'O'
-            amide_oxygen = select(info_table, **kwargs)
-            c_term_frag.append(amide_oxygen[0])
-            n_term_frag.remove(amide_oxygen[0])
+    set_b = isolate_segment(info_table, atom_sn[0], anchor='C')
 
-        except ValueError:
-            pass
-
-    else:    # if input was invalid
-        raise ValueError
-        print(
-            f'{angle_type} is not a valid input for parameter angle_type. '
-            f'Enter either phi or psi')
-
-    clash_sn = is_clashing(
-        coordinates, [n_term_frag, c_term_frag], cutoff_distance)
-    if clash_sn is not None:
-        return clash_sn
-    else:
-        return []
+    if is_clashing(coordinates, [set_a, set_b], cutoff_distance):
+        return True
+    return False
 
 
 def check_external_clash(coordinates, info_table, ser_nums_a, ser_nums_b, cutoff_distance=0.36):
@@ -1241,8 +1210,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
             if res != anchored_residues[ndx + 1] - 1:
                 raise ValueError('All residues in the anchored sequence must'
                                  ' be contiguous')
-    print(f'anchored_residues are {anchored_residues}')
-    print(f'fixed_residues are {fixed_residues}')
+    # print(f'anchored_residues are {anchored_residues}')
+    # print(f'fixed_residues are {fixed_residues}')
 
     # if no chains were passed, use all of them
     if chainlist is None:
@@ -1298,7 +1267,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
     c_anchored_segments = []
     n_anchored_segments = []
-    print(f'there are {len(sn_by_chain)} chains being randomized')
+    # print(f'there are {len(sn_by_chain)} chains being randomized')
 
     # for each chain that needs to be checked internally, add a list of
     # its n terminal and c terminal segments serial numbers as a
@@ -1314,7 +1283,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
             if n_anchor is not None:
 
                 seg = [res for res in free_residues[i] if res < n_anchor]
-
+                # print(f'seg is {seg}')
                 # then put it in reverse order so that rotation iterates from C
                 # towards n terminus
 
@@ -1324,11 +1293,11 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
             if c_anchor is not None:
                 # repeat this for n anchored segments
                 seg = [res for res in free_residues[i] if res > c_anchor]
-                # print(seg)
+                # print(f'this is an n-anchored segment {seg}')
                 seg.sort(reverse=False)
                 n_anchored_segments.append(seg)
-        # print(f'the nterm seg is\n{c_anchored_segments}\nthe c term seg '
-              # f'is\n{n_anchored_segments}')
+    #     print(f'the nterm seg is\n{c_anchored_segments}\nthe c term seg '
+    #           f'is\n{n_anchored_segments}')
     # print(f'there are {len(c_anchored_segments)} c anchored segments')
     # print(f'there are {len(c_anchored_segments)} n anchored segments')
     # print(f'there are {len(chainlist)} chain segments')
@@ -1339,12 +1308,12 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                          'chainlist must all be equal')
 
     # print(f'the chain in this selection are\n{chainlist}\n')
-    # print(f'the C-anchored segments for each chain are {c_anchored_segments}')
-    # print(f'the N-anchored segments for each chain are {n_anchored_segments}')
+    print(f'the C-anchored segments for each chain are {c_anchored_segments}')
+    print(f'the N-anchored segments for each chain are {n_anchored_segments}')
     # loop the generation for each of the n_structs you want to generate
     for ndx in range(0, n_structs):
         for i in range(len(c_anchored_segments)):
-
+            # print(f' there are {len(c_anchored_segments)} c anchored segments')
             if c_anchored_segments[i] != []:
 
                 for num in c_anchored_segments[i]:
@@ -1361,7 +1330,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         while (check_internal_clash(
                                 coordinates, info_table, cutoff_distance,
                                 angle_type='phi', anchor='C', res_num=num,
-                                chain=chainlist[i]) != []
+                                chain=chainlist[i]) == True
                                 and tries < max_tries):
 
                             set_phi_psi(coordinates, info_table,
@@ -1373,7 +1342,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print(f'This is the {tries}th try to unclash '
                                       f'the phi angle for residue number {num}'
-                                      f' on model number {ndx}')
+                                      f' on model number {ndx}\r', end='', flush=True)
                             else:
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
@@ -1382,19 +1351,22 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         print(f'Cant set phi angle for N-terminus or proline'
                               f' at residue {num} of model number {ndx}. '
                               'Skipping this residue')
-                        pass
+
                     try:
+                        print(num)
                         tries = 0
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='C',
                                     res_num=num, chain=chainlist[i])
-                        while (check_internal_clash(coordinates, info_table,
+                        while (check_internal_clash(coordinates,
+                                                    info_table,
+                                                    cutoff_distance,
                                                     angle_type='psi',
                                                     anchor='C',
                                                     res_num=num,
-                                                    chain=chainlist[i]) != []
-                                and tries < 20):
+                                                    chain=chainlist[i]) is True
+                               and tries < 20):
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='psi', anchor='C',
@@ -1403,7 +1375,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print(f'This is the {tries}th try to unclash '
                                       f'the psi angle for residue number '
-                                      f'{num} on model number {ndx}')
+                                      f'{num} on model number {ndx}\r', end='', flush=True)
                             else:
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
@@ -1411,9 +1383,14 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     except ValueError:
                         print(f'Cant set psi for C terminus at residue {num} '
                               f'of model number {ndx}. Skipping this residue.')
-                        pass
+            print(
+                '------------now on to the N anchored segments---------------\n\n\n\n')
             if n_anchored_segments[i] != []:
-                for num in n_anchored_segments:
+                print(
+                    f' there are {len(n_anchored_segments)} n anchored segments')
+                for num in n_anchored_segments[i]:
+                    print(
+                        f'-------working on residue {num}------------')
                     try:
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
@@ -1424,12 +1401,14 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     # with a different random angle
 
                         tries = 0
-                        while (check_internal_clash(coordinates, info_table,
+                        while (check_internal_clash(coordinates,
+                                                    info_table,
+                                                    cutoff_distance,
                                                     angle_type='phi',
                                                     anchor='N',
                                                     res_num=num,
-                                                    chain=chainlist[i]) != []
-                                and tries < 20):
+                                                    chain=chainlist[i]) is True
+                                and tries < max_tries):
 
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1449,18 +1428,20 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         print(f'Cant set phi angle for N-terminus or proline '
                               f'at residue {num} of model number {ndx}. '
                               'Skipping this residue.')
-                        pass
+
                     try:
                         tries = 0
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-                        while (check_internal_clash(coordinates, info_table,
+                        while (check_internal_clash(coordinates,
+                                                    info_table,
+                                                    cutoff_distance,
                                                     angle_type='psi',
                                                     anchor='N',
                                                     res_num=num,
-                                                    chain=chainlist[i]) != []
+                                                    chain=chainlist[i]) is True
                                 and tries < 20):
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1702,8 +1683,8 @@ def clone_chain(coordinates, info_table, chain_list=None):
         last_ndx = len(info_table)
         daughter_chain_sn = [x - smallest_sn +
                              last_ndx for x in mother_chain_sn]
-        # make temp array that is slice of coordinates array where chain is stored
-        # then concetenate the two
+        # make temp array that is slice of coordinates array where chain
+        # is stored then concetenate the two
         new_coords = coordinates[mother_chain_sn[0]: mother_chain_sn[-1]+1]
         coordinates = np.concatenate((coordinates, new_coords)).view(vector)
         # print(coordinates)
@@ -1716,19 +1697,22 @@ def clone_chain(coordinates, info_table, chain_list=None):
     return coordinates, info_table, new_chain_list
 
 
-def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0.0, 0.0, 0.0]), rot_axis=vector([0.0, 0.0, 1.0])):
+def axial_symmetry(coordinates, info_table, chains, multiplicity,
+                   cofr=vector([0.0, 0.0, 0.0]),
+                   rot_axis=vector([0.0, 0.0, 1.0])):
     '''
 
 
         Parameters
         ----------
         chains : LIST
-            list containing strings indicating chains that will be multimerized.
+            list containing strings indicating chains that will be
+            multimerized.
         multiplicity : INT16
             positive integer describing how many subunits in the arrangement
         cofr : VECTOR, optional
-            the center of rotation which the transformation will be applied arround.
-            The default is vector([0.0, 0.0, 0.0]).
+            the center of rotation which the transformation will be applied
+            arround. The default is vector([0.0, 0.0, 0.0]).
         rot_axis : VECTOR, optional
             a vector that serves as axis of rotation after recentering on cofr.
             The default is vector([0.0, 0.0, 1.0]).
@@ -1759,10 +1743,10 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
                         coordinates, info_table, (c)[0])
                     group.append(new_chains[0])
                 chain_groups.append(group)
-                print(f'the group is {group}')
+                # print(f'the group is {group}')
             except ValueError:
-                print(
-                    f'chain {c} does not exist or can not be copied. skipping.')
+                print(f'chain {c} does not exist or can not be copied.'
+                      ' skipping.')
         for group in chain_groups:
             for n, chain_id in enumerate(group):
                 angle = 2*np.pi/multiplicity*n
@@ -1776,25 +1760,30 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity, cofr=vector([0
         raise ValueError
     return coordinates, info_table
 
-######################## for aligning multiple struture files en batch #######
-#  center = select(info_table, res_num=23,	atom_name='CA')
-#   alignment_atom = select(info_table, res_num=13, atom_name='CA')
-#    try:
-#         orient(center, alignment_atom)
-#     except ValueError:
-#         print(f'!!!!!!!!!! ERROR: the input pdb file {fname} cannot be '
-#               'properly oriented, and no oriented output structure was'
-#               ' produced. This is likely due to formatting problems. '
-#               'Inspect the input file !!!!!!!!!!!!!')
-#         outfile_name = None
-#     if outfile_name is not None:
-#         #print('structure orientation sucessful. now writing output...')
-#         # write_pdb(outfile_name)
-#         #print(f'{outfile_name} written sucessfully.\n')
-#         pass
 
+if __name__ == '__main__':
+    coordinates, info_table = import_pdb('straight_up_and_down.pdb')
 
-# axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
-# over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
+    # this is necessary to be created at the main process for is_clashing
+    # to work
+    terminate_event = multiprocessing.Event()
 
-coordinates, info_table = import_pdb('one_of_each.pdb')
+    #################### for aligning multiple struture files en batch #######
+    #  center = select(info_table, res_num=23,	atom_name='CA')
+    #   alignment_atom = select(info_table, res_num=13, atom_name='CA')
+    #    try:
+    #         orient(center, alignment_atom)
+    #     except ValueError:
+    #         print(f'!!!!!!!!!! ERROR: the input pdb file {fname} cannot be '
+    #               'properly oriented, and no oriented output structure was'
+    #               ' produced. This is likely due to formatting problems. '
+    #               'Inspect the input file !!!!!!!!!!!!!')
+    #         outfile_name = None
+    #     if outfile_name is not None:
+    #         #print('structure orientation sucessful. now writing output...')
+    #         # write_pdb(outfile_name)
+    #         #print(f'{outfile_name} written sucessfully.\n')
+    #         pass
+
+    # axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
+    # over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
