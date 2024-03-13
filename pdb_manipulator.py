@@ -20,7 +20,7 @@ import numpy as np
 import multiprocessing
 import math
 from scipy.special import comb
-from scipy.spatial import cKDTree
+from mpl_toolkits.mplot3d import Axes3D
 
 
 class vector (np.ndarray):
@@ -440,7 +440,7 @@ def measure_dihedral(set_of_points, **kwargs):
     # the way to determine whether this angle should be a positive or negative
     # is to see if the cross product of the plane normals is parallel or
     # anti-parallel to the axis of rotation as determined by the dot product
-    if np.dot(np.cross(normal_plane1, normal_plane2), rotation_axis) < 0:
+    if np.dot(np.cross(normal_plane1, normal_plane2), rotation_axis) > 0:
         theta = -theta
     # if 'debug_mode' in kwargs:
     #     print(f'theta: {theta} ({theta*180/np.pi} degrees)')
@@ -1342,7 +1342,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print(f'This is the {tries}th try to unclash '
                                       f'the phi angle for residue number {num}'
-                                      f' on model number {ndx}\r', end='', flush=True)
+                                      f' on model number {ndx}')
                             else:
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
@@ -1375,7 +1375,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print(f'This is the {tries}th try to unclash '
                                       f'the psi angle for residue number '
-                                      f'{num} on model number {ndx}\r', end='', flush=True)
+                                      f'{num} on model number {ndx}')
                             else:
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
@@ -1383,11 +1383,9 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     except ValueError:
                         print(f'Cant set psi for C terminus at residue {num} '
                               f'of model number {ndx}. Skipping this residue.')
-            print(
-                '------------now on to the N anchored segments---------------\n\n\n\n')
+            print('------now on to the N anchored segments----\n\n\n\n')
             if n_anchored_segments[i] != []:
-                print(
-                    f' there are {len(n_anchored_segments)} n anchored segments')
+
                 for num in n_anchored_segments[i]:
                     print(
                         f'-------working on residue {num}------------')
@@ -1466,10 +1464,12 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
         # # write_pdb()
 
 
-def orient(coordinates, info_table, center_sn, axis_sn):
+def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
+           radial_angle=None, reference_vect=None):
     '''
-
-
+    given a serial number for a central atom and a serial number for an atom to
+    define a long axis, orient everything on that chain so that the vector from
+    the center atom to the axis atom alligns with the reference vector.
     Parameters
     ----------
     coordinates : Array of float 64
@@ -1481,25 +1481,52 @@ def orient(coordinates, info_table, center_sn, axis_sn):
     allignment_sn : int
         serial number of the atom which will define the new + z axis relative
         to the center atom
+    reference_vect : vector
+        the axis relative to the standard basis set that you wish to align
+        the long axis to. If none given, [0 , 0, 1].
+
 
     Returns
     -------
-    None.
+    coordinates : Array of float 64
+        The new coordinates after allignment
 
     '''
+    if not all(type(x) == int for x in (axis_sn, center_sn, radial_sn)):
+        raise ValueError('axis_sn, center_sn, and radial_sn must each be a'
+                         'single integer and a valid coordinate serial number')
 
-    if (len(center_sn) != 1) or (len(axis_sn) != 1) or (center_sn == axis_sn):
-        raise ValueError
+    # if unspecified the default is the +z axis
+    if reference_vect is None:
+        reference_vect = vector([0, 0, 1])
+
+    # check for correct input
+    if radial_sn is not None:
+        ref_points = [info_table[center_sn], info_table[axis_sn],
+                      info_table[radial_sn]]
+    else:
+        ref_points = [info_table[center_sn], info_table[axis_sn]]
+
+    ch = ref_points[0]['chain']
+    a = all(x['chain'] == ch for x in ref_points)
+    mod = ref_points[0]['model_name']
+    b = all(x['model_name'] == mod for x in ref_points)
+    sub = ref_points[0]['submodel']
+    c = all(x['submodel'] == sub for x in ref_points)
+    if not a or not b or not c:
+        raise ValueError('All coordinate points for orientation must be from'
+                         'the same chain, model, and submodel')
 
     else:
 
-        ser_nums = range(0, len(coordinates))
+        ser_nums = select(info_table, chain=ch, model_name=mod, submodel=sub)
         # the atom to be made [0,0,0]
-        center = coordinates[center_sn[0]].copy()
-        axis_vector = coordinates[axis_sn[0]]  # atom to be set to [0,0,z]
-        for n in ser_nums:
-            coordinates[n] = coordinates[n] - center
+        center = coordinates[center_sn].copy()
 
+        for n in ser_nums:
+            coordinates[n] -= center
+        # atom to be set to [0,0,z]
+        axis_vector = coordinates[axis_sn].copy()
         # find angle between desired axis and yz plane
         x_ax = vector([1, 0, 0])
         y_ax = vector([0, 1, 0])
@@ -1507,54 +1534,51 @@ def orient(coordinates, info_table, center_sn, axis_sn):
         xy = axis_vector.project_onto_normal_plane(z_ax)
         yz_ang = y_ax.angle_between(xy)
 
+        # if the Z component of the cross product is negative reverse direction
+        crossp = np.cross(xy, y_ax)
+        if crossp[2] < 0:
+            yz_ang = -yz_ang
+
         # rotate everything around the z axis by that angle
         for n in ser_nums:
-            coordinates[n] = coordinates[n].rotate_arround(yz_ang, z_ax)
-
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # ~~~~~~~~~~~~~~ IMPORTANT NOTE ~~~~~~~~~~~~~~~~~~~~~~
-        # for some reason, the direction of the axis of rotation must be
-        # reversed for some structures to get the alignment vector to
-        # properly be in the yz plane, so we need to check whether the x
-        # element after rotation is within floating point error of 0,
-        # and rotate in the opposite direction if it is not. that is why
-        # the following code block is needed
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        if axis_vector[0] < 0.00001 and axis_vector[0] > -0.00001:
-            pass
-        else:
-            # print('\n~~~~~~ERROR: THIS X COORDINATE OF THE ALIGNMENT VECTOR'
-            #      ' SHOULD NOW BE 0 (within floating point error) BUT IT '
-            #     'ISNT! ~~~~~~~~~~\n\nRetrying by reversing the '
-            #    'direction of rotation ...')
-            for n in ser_nums:
-                coordinates[n] = coordinates[n].rotate_arround(-2*yz_ang, z_ax)
-            if axis_vector[0] < 0.00001 and axis_vector[0] > -0.00001:
-                # print('ERROR RESOLVED: the alignment vector is now: '
-                #      f'{axis_vector}')
-                pass
-            else:
-                # as a last resort (which should never be necessary), try
-                # incremental rotations arround the z axis
-                attempts = 1
-                while axis_vector[0] > 0.00001 and axis_vector[0] < -0.00001 \
-                        and attempts < 51:
-                    for n in ser_nums:
-                        coordinates[n] = coordinates[n].rotate_arround(
-                            0.01, z_ax)
-                if axis_vector[0] > 0.00001 and axis_vector[0] < -0.00001:
-                    raise ValueError
-
-        # now find angle between desired axis and current + z axis
-        # and rotate everything by that
-        z_ang = axis_vector.angle_between(z_ax)
-        # print(f'the angle relative to the +z axis is now: {z_ang}')
-
-        for n, vect in enumerate(coordinates):
 
             if n != center_sn:
-                coordinates[n] = vect.rotate_arround(
-                    -1*z_ang, x_ax)
+                coordinates[n] = coordinates[n].rotate_arround(
+                    yz_ang, z_ax)
+
+        # our reference is now in the yz plane, find the angle to +z
+        yz = coordinates[axis_sn]
+        z_ang = z_ax.angle_between(yz)
+
+        # if the X component of the cross product is negative reverse direction
+        crossp = np.cross(yz, z_ax)
+        if crossp[0] < 0:
+            z_ang = -z_ang
+
+        for n in ser_nums:
+
+            if n != center_sn:
+                coordinates[n] = coordinates[n].rotate_arround(
+                    z_ang, x_ax)
+
+        # the radial projection vector will point to the center of
+        # the subunit assembly, when the subunit is rotated by the given
+        # angle arround an internal axis. If we want the vector from
+        # center atom and the vector to the center of subunit
+        # rotation to be e.g. +30 degrees, we specify pi/6 as the argument for
+        # radial angle
+        if radial_sn is not None:
+            radial_projection = coordinates[radial_sn].project_onto_normal_plane(
+                reference_vect)
+            points_to_center = radial_projection.unitize().copy()
+            if radial_angle != 0:
+                for n in ser_nums:
+                    coordinates[n] = coordinates[n].rotate_arround(
+                        radial_angle, reference_vect)
+        else:
+            points_to_center = None
+
+    return coordinates, points_to_center
 
 
 def helix_vector(coordinates, info_table, nterm_res, cterm_res):
@@ -1573,10 +1597,12 @@ def helix_vector(coordinates, info_table, nterm_res, cterm_res):
     -------
         vector
         An R3 vector corresponding to the line of best fit along the CA
-        atoms of the helix that indicates the direction the helix is pointing in
+        atoms of the helix that indicates the direction the helix is pointing
+        in
     '''
     # get ser nums of all alpha carbons in that range
-    c_alpha_ser_nums = select(info_table, res_num=(list(range(nterm_res, cterm_res+1))),
+    c_alpha_ser_nums = select(info_table, res_num=(list(range(nterm_res,
+                                                              cterm_res+1))),
                               atom_name='CA')
     n_atoms = len(c_alpha_ser_nums)
     c_alpha_coords = np.zeros(shape=(n_atoms, 3))
@@ -1622,10 +1648,12 @@ def import_from_vmd(filename=None):
                                 'ser_num': n, 'model_name': a_tuple[0],
                                 'submodel': a_tuple[1], 'chain': a_tuple[2],
                                 'res_num': a_tuple[3][1], 'res_name':
-                                residue.get_resname(), 'atom_name': a_tuple[4][0],
+                                residue.get_resname(),
+                                'atom_name': a_tuple[4][0],
                                 'phi': float('nan'), 'psi': float('nan')
                             }
-                            # the last 2 are empty fields where phi & psi are assigned
+                            # the last 2 are empty fields where phi &
+                            # psi are assigned
 
                             info_table.append(a_dict)
                             n = n + 1
@@ -1666,13 +1694,15 @@ def clone_chain(coordinates, info_table, chain_list=None):
     if chain_list is None:
         # if no chain was specified, select all chains
         chain_list = existing_chains
+    elif type(chain_list) is str:
+        chain_list = [chain_list]
     alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     availible_letters = [
         letter for letter in alphabet if letter not in existing_chains]
     new_chain_list = []
     for chain in chain_list:
 
-        # assign a new letter for the new chain and remove tha letter from the
+        # assign a new letter for the new chain and remove that letter from the
         # list of availible ones
         new_chain = min(availible_letters)
         new_chain_list.append(new_chain)
@@ -1697,11 +1727,10 @@ def clone_chain(coordinates, info_table, chain_list=None):
     return coordinates, info_table, new_chain_list
 
 
-def axial_symmetry(coordinates, info_table, chains, multiplicity,
-                   cofr=vector([0.0, 0.0, 0.0]),
+def axial_symmetry(coordinates, info_table, multiplicity, radius,
+                   center_sn, axis_sn, radial_sn, radial_angle=0,
                    rot_axis=vector([0.0, 0.0, 1.0])):
     '''
-
 
         Parameters
         ----------
@@ -1719,7 +1748,7 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity,
 
         Returns
         -------
-        None.
+        Coordinates, info_table.
 
         '''
     try:
@@ -1728,46 +1757,69 @@ def axial_symmetry(coordinates, info_table, chains, multiplicity,
         print('The axis of rotation can not be the zero vector')
 
     if multiplicity < 2 or type(multiplicity) is not int:
-        print('multiplicity for axial symmetry must be an integer 2 or greater')
+        print('multiplicity for axial symmetry must be an integer 2 or'
+              ' greater')
         raise ValueError
 
-    # a list containing lists of chains which are identical
-    chain_groups = []
-    if chains:
-        for c in chains:
-            group = []
-            group.append(c)
-            try:
-                for x in range(0, (multiplicity - 1)):
-                    coordinates, info_table, new_chains = clone_chain(
-                        coordinates, info_table, (c)[0])
-                    group.append(new_chains[0])
-                chain_groups.append(group)
-                # print(f'the group is {group}')
-            except ValueError:
-                print(f'chain {c} does not exist or can not be copied.'
-                      ' skipping.')
-        for group in chain_groups:
-            for n, chain_id in enumerate(group):
-                angle = 2*np.pi/multiplicity*n
-                current_chain = select(info_table, chain=chain_id)
-                for sn in current_chain:
-                    coordinates[sn] = coordinates[sn].rotate_arround(
-                        angle, vector([0, 0, 1]))
+    # first orient the chain specified by your reference vector points
 
-    else:
-        print('No chains were provided')
-        raise ValueError
+    coordinates, radial_axis = orient(coordinates, info_table, center_sn,
+                                      axis_sn, radial_sn, radial_angle,
+                                      rot_axis)
+
+    symmetry_center = radial_axis*radius
+    # duplicate the chain, and keep a list of chains related by symmetry
+    chain_group = []
+    chain = info_table[center_sn]['chain']
+    chain_group.append(chain[0])
+    try:
+        for x in range(0, (multiplicity - 1)):
+            coordinates, info_table, new_chain = clone_chain(
+                coordinates, info_table, chain)
+            print(new_chain)
+            chain_group.append(new_chain[0])
+    except ValueError:
+        print(f'chain {chain} does not exist or can not be copied.'
+              ' skipping.')
+    print(chain_group)
+    for n, chain_id in enumerate(chain_group):
+        angle = 2*np.pi/multiplicity*n
+        current_chain = select(info_table, chain=chain_id)
+        for sn in current_chain:
+            coordinates[sn] -= symmetry_center
+            coordinates[sn] = coordinates[sn].rotate_arround(
+                angle, rot_axis)
+
     return coordinates, info_table
 
 
 if __name__ == '__main__':
-    coordinates, info_table = import_pdb('straight_up_and_down.pdb')
+    coordinates, info_table = import_pdb('randomized_S2E_0.pdb')
+    center_sn = select(info_table, res_num=23,	atom_name='CA')
+    axis_sn = select(info_table, res_num=13, atom_name='CA')
+    radial_sn = select(info_table, res_num=22, atom_name='CA')
+    coordinates, info_table = axial_symmetry(coordinates, info_table, 5, 9,
+                                             center_sn[0], axis_sn[0],
+                                             radial_sn[0])
 
-    # this is necessary to be created at the main process for is_clashing
-    # to work
-    terminate_event = multiprocessing.Event()
-
+    # center = select(info_table, res_num=23,	atom_name='CA')
+    # alignment_atom = select(info_table, res_num=13, atom_name='CA')
+    # orient(coordinates, info_table, center, alignment_atom)
+    # set_phi_psi(coordinates, info_table, -np.pi/3,
+    #             res_num=[37])
+    # set_phi_psi(coordinates, info_table, -np.pi/3, angle_type='psi', anchor='N',
+    #             res_num=[36, 37])
+    # coordinates, info_table = axial_symmetry(coordinates, info_table, ['A'],
+    #                                          5, cofr=vector([4, 4, 0]),
+    #                                          rot_axis=vector([0, 0, 1]))
+    # rand1 = random.gauss(0, 0.1)
+    # rand2 = random.gauss(0, 0.1)
+    # rand3 = random.gauss(0, 2)
+    # coordinates, info_table = axial_symmetry(coordinates, info_table, ['A'],
+    #                                          5, cofr=vector([(-6 + rand1), (-3 + rand2), 0]),
+    #                                          rot_axis=vector([0+rand3, 0+rand3, 1]))
+    write_pdb(coordinates, info_table, 'pentamer_clash_test')
+    # np.savetxt('a.csv', coordinates, delimiter=',')
     #################### for aligning multiple struture files en batch #######
     #  center = select(info_table, res_num=23,	atom_name='CA')
     #   alignment_atom = select(info_table, res_num=13, atom_name='CA')
