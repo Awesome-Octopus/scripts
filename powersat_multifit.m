@@ -23,7 +23,7 @@ condition = powersat_multiload;
                 condition(p).rep(i).attstep = (10*log10(200/condition(p).rep(i).params.YMIN)...
                 + 10*log10(200/(condition(p).rep(i).params.YMIN + ...
                 condition(p).rep(i).params.YWID)))...
-                /condition(p).rep(i).params.YPTS
+                /condition(p).rep(i).params.YPTS;
 
 
                 powermaxatt = 10*log10(200/(condition(p).rep(i).params.YWID - ...
@@ -34,14 +34,14 @@ condition = powersat_multiload;
                 condition(p).rep(i).params.YPTS = condition(p).rep(i).params.YPTS - numMaskPts;
 
                 % and delete the first X columns in the y data
-                condition(p).rep(i).ydata = condition(p).rep(i).ydata(:,numMaskPts+1:end)
+                condition(p).rep(i).ydata = condition(p).rep(i).ydata(:,numMaskPts+1:end);
 
                 % and delete the first X rows in xdata
-                condition(p).rep(i).xdata{1,2} = condition(p).rep(i).xdata{1,2}(numMaskPts+1:end)
+                condition(p).rep(i).xdata{1,2} = condition(p).rep(i).xdata{1,2}(numMaskPts+1:end);
 
                 % scale the YWID param to adjust max power point
                 condition(p).rep(i).params.YWID = 200/10^((powermaxatt+numMaskPts*...
-                condition(p).rep(i).attstep)/10)-condition(p).rep(i).params.YMIN
+                condition(p).rep(i).attstep)/10)-condition(p).rep(i).params.YMIN;
 
             end    
         end    

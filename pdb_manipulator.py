@@ -20,7 +20,8 @@ import numpy as np
 import multiprocessing
 import math
 from scipy.special import comb
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits import mplot3d
+import matplotlib.pyplot as plt
 
 
 class vector (np.ndarray):
@@ -31,11 +32,9 @@ class vector (np.ndarray):
         return obj
 
     def get_length(self):
-
         return np.linalg.norm(self)
 
     def unitize(self):
-
         length = self.get_length()
         if length == 0:
             raise ZeroDivisionError(
@@ -45,7 +44,7 @@ class vector (np.ndarray):
             return (self/length)
 
     def is_nonzero(self):
-        if self.get_length() == 0:
+        if self.get_length() < 1e-7:
             return False
         else:
             return True
@@ -74,6 +73,8 @@ class vector (np.ndarray):
                 return np.pi
             else:
                 # Compute the angle using arccos
+                # print(
+                #     f'the vector is now {self.get_length()} long\n the other vector is {other_vector.get_length()} long')
                 return np.arccos(c)
         except ZeroDivisionError as err:
             print(
@@ -82,7 +83,10 @@ class vector (np.ndarray):
                 err)
 
     def is_orthogonal(self, other_vector):
-        if self.angle_between(other_vector) == np.pi/2:
+        v = np.dot(self, other_vector)
+        f_point_tollerance = 1e-7
+        if v < f_point_tollerance and \
+           v > -f_point_tollerance:
             return True
         else:
             return False
@@ -92,6 +96,7 @@ class vector (np.ndarray):
         # rotate a 2d or a 3d vector arround another 2d or 3d vector by the
         # given angle according to right hand rule. intentionally
         # not defined for vectors of rank 4 or greater
+        # print(f'the starting vector is {self.get_length()} long')
         if len(axis_vector) != 0:
             if axis_vector.is_nonzero() is True:
                 axis_vector = axis_vector.unitize()
@@ -116,7 +121,9 @@ class vector (np.ndarray):
                     rot_mat = np.asarray([[m1, m2, m3],
                                           [m4, m5, m6],
                                           [m7, m8, m9]])
-                    return np.matmul(rot_mat, self)
+                    a = np.matmul(rot_mat, self)
+                    # print(f'afterwards it is now {a.get_length()} long')
+                    return a
                 else:
                     raise ValueError(
                         'Error in vector.rotate_arround(): Dimensions of '
@@ -141,10 +148,96 @@ class vector (np.ndarray):
         # component of the first vector which is orthogonal to the second, in
         # other words, if the second vector defined the normal of a plane, give
         # the shadow of the first vector projected onto that plane
-
+        # print(f'before projection, length is {self.get_length()}')
         a = self.dot(other_vector.unitize())
         shadow = self - a*other_vector
+        # print(
+        #     f'after projection its shadow is {shadow.get_length()} long, while it is hopefully still only {self.get_length()} long')
         return shadow
+
+
+def cylind2cart(coordinates, i_hat, j_hat, k_hat):
+    """
+
+
+    Parameters
+    ----------
+    coordinates : array of vectors
+        an n by 3 array of 3d vectors given in cylindrical coordinates.
+        Follows the convention z(height), theta (angle), r(radius)
+    i_hat : vector
+        Cartesian unit basis vector. conventionally the x axis.
+    j_hat : vector
+        Cartesian unit basis vector. conventionally the y axis.
+    k_hat : TYPE
+        Cartesian unit basis vector. conventionally the z axis.
+
+    Returns
+    -------
+    cartesian : array of vectors
+        returns the cartesian version of the inputted cylindrical coordinates.
+
+    """
+    cartesian = coordinates.copy()
+    for i in range(len(coordinates)):
+        z = coordinates[i][0]
+        theta = coordinates[i][1]
+        r = coordinates[i][2]
+        cartesian[i][0] = r*np.cos(theta)
+        cartesian[i][1] = r*np.sin(theta)
+        cartesian[i][2] = z
+    cartesian = change_basis(cartesian, vector([0, 0, 0]), i_hat, j_hat, k_hat)
+    return cartesian
+
+
+def cart2cylind(coordinates, center_vector, axial_vector, radial_vector):
+    """
+
+
+    Parameters
+    ----------
+    coordinates : TYPE
+        DESCRIPTION.
+    center_vector :
+    axial_vector : vector
+        vector in cartesian coordinates that will form the long axis
+    radial_vector : vector
+        vector in cartesian coordinates that will form the radial axis
+
+    Returns
+    -------
+    coordinates.
+
+    """
+    print(f'cart2cylind : axial_vector {axial_vector}')
+    print(f'cart2cylind : radial_vector {radial_vector}')
+    if not axial_vector.is_nonzero() or not radial_vector.is_nonzero():
+        raise ValueError('Basis vectors must be non-zero')
+    if not axial_vector.is_orthogonal(radial_vector):
+        raise ValueError('Basis vectors must be orthogonal')
+    axial_vector = axial_vector.unitize()
+    radial_vector = radial_vector.unitize()
+    crossp = vector(np.cross(axial_vector, radial_vector))
+    # print(type(coordinates), type(axial_vector), type(radial_vector))
+    # print(coordinates, axial_vector, radial_vector, crossp)
+    cylindrical_coordinates = change_basis(coordinates, center_vector,
+                                           radial_vector, crossp,
+                                           axial_vector)
+    for n in range(len(cylindrical_coordinates)):
+
+        q = cylindrical_coordinates[n][2]
+        d = cylindrical_coordinates[n].project_onto_normal_plane(
+            vector([0, 0, 1]))
+
+        radius = d.get_length()
+        if radius == 0:
+            cylindrical_coordinates[n][1] = 0
+        else:
+            cylindrical_coordinates[n][1] = np.arctan2(d[1], d[0])
+        cylindrical_coordinates[n][2] = radius
+        cylindrical_coordinates[n][0] = q
+        # print(cylindrical_coordinates[n])
+    return cylindrical_coordinates
 
 
 def convert_angle(angle):
@@ -159,6 +252,7 @@ def convert_angle(angle):
     else:
         new_angle = v
     return new_angle
+
 # <codecell> Functions
 
 
@@ -269,6 +363,164 @@ def get_dihedral_backbones(info_table, ca_ser_nums):
             next_amide = None
         bb_ser_nums.append([prev_c, amide, sn, carboxyl, next_amide])
     return bb_ser_nums
+
+
+def change_basis(coordinates, center_v, x_prime, y_prime,
+                 z_prime):
+    '''
+    given a serial number for a central atom and a serial number for an atom to
+    define a long axis, orient everything on that chain so that the vector from
+    the center atom to the axis atom alligns with the reference vector.
+    Parameters
+    ----------
+    coordinates : Array of float 64
+        the atomic coordinates of all atoms
+    info_table : list
+        list of dictionaries containing data for each coordinate
+    center_sn : int
+        serial number of the atom which is to be centered at [0 0 0]
+    allignment_sn : int
+        serial number of the atom which will define the new + z axis relative
+        to the center atom
+    reference_vect : vector
+        the axis relative to the standard basis set that you wish to align
+        the long axis to. If none given, [0 , 0, 1].
+
+
+    Returns
+    -------
+    coordinates : Array of float 64
+        The new coordinates after allignment
+
+    '''
+
+    # input testing
+    ref_points = [center_v, x_prime, y_prime, z_prime]
+    new_basis = [x_prime, y_prime, z_prime]
+    if not all(a.is_orthogonal(b) for a in new_basis for b in
+               new_basis if a is not b):
+        raise ValueError('new basis vectors must be orthogonal')
+
+    if any(not a.is_nonzero() for a in [x_prime, y_prime, z_prime]):
+        raise ValueError('basis vectors can not be zero')
+
+    x_ax = vector([1, 0, 0])
+    y_ax = vector([0, 1, 0])
+    z_ax = vector([0, 0, 1])
+
+    x_scale = x_prime.get_length()
+    y_scale = y_prime.get_length()
+    z_scale = z_prime.get_length()
+
+    copy_coords = coordinates.copy()
+
+    for n in range(len(copy_coords)):
+        if np.array_equal(center_v, copy_coords[n]):
+            c = copy_coords[n]
+        copy_coords[n] -= center_v
+
+    # if bases within fp error of one another, just return
+    # the input
+    if np.allclose(new_basis, [x_ax, y_ax, z_ax]):
+        return coordinates
+    else:
+        x_prime = x_prime.unitize()
+        y_prime = y_prime.unitize()
+        z_prime = z_prime.unitize()
+
+    # if the dot products of the unitized vectors and their coresponding basis
+    # vectors are all either 1 or -1 , we dont need to perform rotation, only
+    # scalar multiplication along an axis
+    d_prods = [np.dot(a, b) for a, b in zip([x_prime, y_prime, z_prime],
+                                            [x_ax, y_ax, z_ax])]
+    # print(f'dot products {d_prods}')
+    if all(np.allclose(a, 1) or np.allclose(a, -1) for a in d_prods):
+
+        # print('reflection')
+        # perform a reflection
+        pass
+
+    # if the z axis isn't already alligned, do that first
+    elif not np.allclose(z_prime, z_ax):
+
+        xy = z_prime.project_onto_normal_plane(z_ax)
+        # print(f'xy projection {xy}')
+
+        if not xy.is_nonzero():
+            yz_ang = None
+
+        # if the bases aren't antiparalell or paralell
+        elif not np.allclose(-z_prime, z_ax):
+            yz_ang = y_ax.angle_between(xy)
+            crossp = vector(np.cross(xy, y_ax))
+            # if the Z component of the cross product is negative, reverse
+            # the direction
+            if crossp[2] < 0:
+                yz_ang = -yz_ang
+
+            # print(f'yz_ang {yz_ang}')
+            # rotate everything around the z axis by that angle
+            for n in range(len(copy_coords)):
+                if copy_coords[n].is_nonzero():
+                    copy_coords[n] = copy_coords[n].rotate_arround(
+                        yz_ang, z_ax)
+                x_prime = x_prime.rotate_arround(yz_ang, z_ax)
+                y_prime = y_prime.rotate_arround(yz_ang, z_ax)
+                z_prime = z_prime.rotate_arround(yz_ang, z_ax)
+                # print(
+                #     f'x prime: {x_prime}, y prime: {y_prime}, z prime: {z_prime}')
+            z_ang = z_prime.angle_between(z_ax)
+            crossp = vector(np.cross(z_prime, z_ax))
+
+            # if cross product is on +x rotation is positive
+            if crossp[0] < 0:
+                z_ang = -z_ang
+            for n in range(len(copy_coords)):
+                if copy_coords[n].is_nonzero():
+                    copy_coords[n] = copy_coords[n].rotate_arround(
+                        z_ang, x_ax)
+                x_prime = x_prime.rotate_arround(z_ang, x_ax)
+                y_prime = y_prime.rotate_arround(z_ang, x_ax)
+                z_prime = z_prime.rotate_arround(z_ang, x_ax)
+
+    # z axes are now alligned, we now align x axes by rotation arround z
+    if not np.allclose(x_prime, x_ax):
+        x_ang = x_prime.angle_between(x_ax)
+        crossp = vector(np.cross(x_prime, x_ax))
+        if np.allclose(crossp, vector([0, 0, 0])):
+            x_ang = np.pi
+        elif crossp[2] < 0:
+            x_ang = -x_ang
+        for n in range(len(copy_coords)):
+            if copy_coords[n].is_nonzero():
+                copy_coords[n] = copy_coords[n].rotate_arround(
+                    x_ang, z_ax)
+            x_prime = x_prime.rotate_arround(x_ang, x_ax)
+            y_prime = y_prime.rotate_arround(x_ang, x_ax)
+            z_prime = z_prime.rotate_arround(x_ang, x_ax)
+
+    # if all the dot products were 1, we are done, otherwise we have switched
+    # to a left handed coordinate system and need to invert Y
+    d_prods = [np.dot(a, b) for a, b in zip([x_prime, y_prime, z_prime],
+                                            [x_ax, y_ax, z_ax])]
+    if not all(np.allclose(a, 1) for a in d_prods):
+        for n in range(len(copy_coords)):
+            copy_coords[n][1] = -copy_coords[n][1]
+
+    # lasty divide by the length of the new basis vectors if they weren't unit
+    # vectors
+
+    if not np.allclose(x_scale, 1):
+        for n in range(len(copy_coords)):
+            copy_coords[n][0] = copy_coords[n][0]/x_scale
+    if not np.allclose(y_scale, 1):
+        for n in range(len(copy_coords)):
+            copy_coords[n][1] = copy_coords[n][1]/y_scale
+    if not np.allclose(z_scale, 1):
+        for n in range(len(copy_coords)):
+            copy_coords[n][2] = copy_coords[n][2]/z_scale
+
+    return copy_coords
 
 
 def isolate_segment(info_table, atom_sn, anchor='N'):
@@ -442,8 +694,6 @@ def measure_dihedral(set_of_points, **kwargs):
     # anti-parallel to the axis of rotation as determined by the dot product
     if np.dot(np.cross(normal_plane1, normal_plane2), rotation_axis) > 0:
         theta = -theta
-    # if 'debug_mode' in kwargs:
-    #     print(f'theta: {theta} ({theta*180/np.pi} degrees)')
 
     return theta
 
@@ -796,8 +1046,8 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                 next_ca = select(info_table, res_num=next_res,
                                  chain=c, submodel=smod, model_name=mod,
                                  atom_name='CA')
-                vects = [coordinates[bb_sn[2]], coordinates[bb_sn[3]], coordinates[bb_sn[4]],
-                         coordinates[next_ca[0]]]
+                vects = [coordinates[bb_sn[2]], coordinates[bb_sn[3]],
+                         coordinates[bb_sn[4]], coordinates[next_ca[0]]]
                 rot_ang = angle - measure_dihedral(vects)
 
                 # for omega the carboyl is the center
@@ -825,7 +1075,8 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                 for s in bb_sn[1:4]:
                     info_table[s]['omega'] = measure_dihedral(vects)
                 # print(
-                #     f"omega for residue {next_res -1} = {info_table[s]['omega']}")
+                #     f"omega for residue {next_res -1} = "
+                # f"{info_table[s]['omega']}")
 
 
 def write_pdb(coordinates, info_table, outfile=None):
@@ -954,52 +1205,6 @@ def ramachandran(coordinates, info_table):
     return mpl.pyplot.scatter(phis, psis)
 
 
-# this inner function will divide up the pairwise search by a divide and
-# conquer multiprocessing algorithm to make it faster. if any of the
-# subprocesses halt, each is terminated.
-def pairwise_search(pair, threshold, terminate_event):
-    '''
-        given a pair of serial numbers, search in paralell until you find a pair with
-        distance less than threshold
-
-        Parameters
-        ----------
-        pairs : list of 2 integers
-            pair of serial numbers whose coordinates will be searched
-        threshold : Float64
-            distance threshold
-        terminate_event : multiprocessing.event
-            signals termination of other threads if clash detected
-
-        Returns
-        -------
-        None.
-
-        '''
-
-    # print('top of pairwise search')
-
-    if terminate_event.is_set():
-        # print('aborting')
-        # if this or any other subprocess sent term signal
-        # just abort
-        return None
-
-    # measure distance between the coordinates of pointed to by
-    # index pair serial numbers
-    dist = coordinates[pair[0]].distance_between(
-        coordinates[pair[1]])
-    if dist < threshold:
-        # print('clash detected')
-
-        # Put the result into the queue created by the
-        # calling function
-        # then set the event variable
-        # to tell each subprocess to stop
-        terminate_event.set()
-        return pair
-
-
 def is_clashing(coordinates, search_set_indices, threshold):
     '''
     given 2 lists of serial numbers, return true if any pairwise combination
@@ -1043,7 +1248,8 @@ def is_clashing(coordinates, search_set_indices, threshold):
 # number on one side of the atom against all others on the other side,but
 # for now it needs to fit into existing code.
 
-def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type, anchor, **kwargs):
+def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type,
+                         anchor, **kwargs):
 
     if angle_type == 'phi':
         # get the index of the nitro of the current res
@@ -1053,7 +1259,8 @@ def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type, a
             raise ValueError('no more than 1 atom can be specified for segment'
                              'isolation')
         # print(
-        #     f"check internal: atom_sn is {atom_sn} which is {anchor} anchored and is a {info_table[atom_sn[0]]['atom_name']}\n")
+        #     f"check internal: atom_sn is {atom_sn} which is {anchor}"
+        #     f"anchored and is a {info_table[atom_sn[0]]['atom_name']}\n")
     elif angle_type == 'psi':
         # get the index of the carbonyl of the current res
         kwargs['atom_name'] = 'C'
@@ -1070,7 +1277,96 @@ def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type, a
     return False
 
 
-def check_external_clash(coordinates, info_table, ser_nums_a, ser_nums_b, cutoff_distance=0.36):
+def rot_sym_clash_check(coordinates, info_table, multiplicity,
+                        radial_v, rot_ax, radius, n_slices,
+                        cutoff_distance=0.36, center_v=vector([0, 0, 0])):
+    '''
+    Checks if a given set of coordinates can produce radial symmetry arround
+    the center vector, when multiplicity copies are arranged along the rot_ax.
+
+    Parameters
+    ----------
+    coordinates : Array of vector
+        a SUBSET of the total set of coordinates, which is the group
+        of molecules to be considered for symmetry testing. coordinates should
+        be in the standard cartesian basis.
+    info_table : List of dictionaries
+        contains standard identifying info for coordinate vectors
+    multiplicity : Int
+        An integer 2 or greater that indicates the number of symmetrical units.
+    center_v : vector
+        center of symmetry for the multimer to be tested. This should
+        generally be outside the bounding volume of the molecule, and in
+        standard cartesian basis.
+    radial_v :vector
+        radial axis. should be orthogonal to rot_ax, and in
+        standard cartesian basis.
+    rot_ax : vector
+        The axis arround which rotational symmetry of the moleule will be
+        tested.
+    cutoff_distance : float
+        the distance threshold below which is considered a clash.
+
+    Returns
+    -------
+    None.
+
+    '''
+
+    def onion_method():
+
+        # get the highest and lowest values of theta
+        # an easy hueristic is that if the angle needed to contain
+        # all the point os a monomer in an arc arround the center
+        # is less than 2 pi / n, then that monomer can have n fold
+        # radial symmetry without clashes between subunits
+        a = np.argmin(cylind_coords[:, 1])
+        b = np.argmax(cylind_coords[:, 1])
+        if b - a < 2*np.pi/multiplicity:
+            return False
+
+        else:
+            # sort cylindrical coordnates by z and bin them
+
+            # find the range for each bin
+            ndx_by_slice = np.argsort(cylind_coords[:, 0]).copy()
+            min_z = cylind_coords[[ndx_by_slice[0]][0]]
+            max_z = cylind_coords[ndx_by_slice[-1]][0]
+            dz = (max_z - min_z)/n_slices
+
+            intervals = []
+            for i in range(n_slices):
+                intervals.append(min_z + i*dz)
+
+            print(intervals)
+
+    # print(f'center v: {center_v}')
+    # print(f'radial v : {radial_v}')
+    # print(f'rot ax : {rot_ax}')
+    if not rot_ax.is_nonzero():
+        raise ValueError('The axis of rotation cannot be the zero vector')
+    if not radial_v.is_nonzero():
+        raise ValueError('The radial axis cannot be the zero vector')
+
+    # copy subset of coordinates and recenter on center_v
+    cylind_coords = coordinates.copy()
+    for i in range(len(coordinates)):
+        cylind_coords[i] = cylind_coords[i] - center_v
+
+    # convert to cylindrical coordinates, and change basis so that rot_ax is
+    # directly along the cylindrical axis, and all angles are relative to
+    # radial_v
+
+    print(onion_method())  # only an intermediate check replace line later
+
+    back_2_cart = cylind2cart(cylind_coords, vector([1, 1, 0]),
+                              vector([-1, 1, 0]), vector([0, 0, 1]))
+    # write_pdb(back_2_cart, info_table, 'converted_back')
+    return back_2_cart
+
+
+def check_external_clash(coordinates, info_table, ser_nums_a, ser_nums_b,
+                         cutoff_distance=0.36):
 
  # ######################## END GOAL #####################################
  # check first heuristically (since a positive result is definitive), then
@@ -1093,13 +1389,11 @@ def check_external_clash(coordinates, info_table, ser_nums_a, ser_nums_b, cutoff
 
     is_clashing = False
 
-    def heuristic_test():
-        pass
-
     def pairwise_test():
         for sa in ser_nums_a:
             for sb in ser_nums_b:
-                if (coordinates[sa] - coordinates[sb]).get_length < cutoff_distance:
+                if (coordinates[sa] - coordinates[sb]).get_length < \
+                        cutoff_distance:
                     is_clashing = True
                     return is_clashing
 
@@ -1110,17 +1404,10 @@ def check_external_clash(coordinates, info_table, ser_nums_a, ser_nums_b, cutoff
 
 def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     cutoff_distance=0.36, chainlist=None,
-                    symmetry_groups='all', max_tries=20):
+                    symmetry_groups='all', max_tries=20, base_fname='random'):
 
     f = open(residue_list_filename, 'r')
     residue_list = f.readlines()
-
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # !!!! this processes correctly and sets up the anchored and free segments
-    # !!!! right but doesn't seem to change the phi and psi angles
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # !!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # change it to accept input file format that include the chain along with
@@ -1131,10 +1418,11 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # !!!
 
     # symmetry_groups will be a list of lists each containing Chain letters of
-    # chains which are related to each other by symmetry this will be used to expedite
-    # clash checking. if none are given, all chains will be treated as identical in
-    # sequence qand related by symmetry together in one symmetry group, else if the value None is
-    # passed, or an empty list is passed, they will all be treated as different
+    # chains which are related to each other by symmetry this will be used to
+    # expedite clash checking. if none are given, all chains will be treated
+    # as identical in sequence qand related by symmetry together in one
+    # symmetry group, else if the value None is passed, or an empty list is
+    # passed, they will all be treated as different
 
     # residue numbers after the header 'anchored:' in the residue file will
     # be put in a separate list, these residues cannot move at all
@@ -1296,11 +1584,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                 # print(f'this is an n-anchored segment {seg}')
                 seg.sort(reverse=False)
                 n_anchored_segments.append(seg)
-    #     print(f'the nterm seg is\n{c_anchored_segments}\nthe c term seg '
-    #           f'is\n{n_anchored_segments}')
-    # print(f'there are {len(c_anchored_segments)} c anchored segments')
-    # print(f'there are {len(c_anchored_segments)} n anchored segments')
-    # print(f'there are {len(chainlist)} chain segments')
+
     if len(c_anchored_segments) != len(n_anchored_segments) and \
             len(free_residues) != len(chainlist):
         raise ValueError('the number of lists in c_anchored_segments, '
@@ -1313,7 +1597,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # loop the generation for each of the n_structs you want to generate
     for ndx in range(0, n_structs):
         for i in range(len(c_anchored_segments)):
-            # print(f' there are {len(c_anchored_segments)} c anchored segments')
+
             if c_anchored_segments[i] != []:
 
                 for num in c_anchored_segments[i]:
@@ -1325,7 +1609,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
                         # if your backbone adjustment resulted in a clash,
                         # retry with a different random angle
-
+                        print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
                         while (check_internal_clash(
                                 coordinates, info_table, cutoff_distance,
@@ -1340,9 +1624,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
                             tries += 1
                             if tries < max_tries:
-                                print(f'This is the {tries}th try to unclash '
-                                      f'the phi angle for residue number {num}'
-                                      f' on model number {ndx}')
+                                print('.', end='')
                             else:
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
@@ -1353,7 +1635,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                               'Skipping this residue')
 
                     try:
-                        print(num)
+                        print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
@@ -1373,9 +1655,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                         res_num=num, chain=chainlist[i])
                             tries += 1
                             if tries < max_tries:
-                                print(f'This is the {tries}th try to unclash '
-                                      f'the psi angle for residue number '
-                                      f'{num} on model number {ndx}')
+                                print('.', end='')
                             else:
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
@@ -1383,18 +1663,16 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     except ValueError:
                         print(f'Cant set psi for C terminus at residue {num} '
                               f'of model number {ndx}. Skipping this residue.')
-            print('------now on to the N anchored segments----\n\n\n\n')
+            # print('------now on to the N anchored segments----\n\n\n\n')
             if n_anchored_segments[i] != []:
 
                 for num in n_anchored_segments[i]:
-                    print(
-                        f'-------working on residue {num}------------')
                     try:
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='phi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-
+                        print(f'\n---model: {ndx} residue: {num} ', end='')
                     # if your backbone adjustment resulted in a clash, retry
                     # with a different random angle
 
@@ -1415,11 +1693,9 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
                             tries += 1
                             if tries < max_tries:
-                                print(f'This is the {tries}th try to unclash'
-                                      f'the phi angle for residue number {num}'
-                                      f' on model number {ndx}')
+                                print('.', end='')
                             else:
-                                print(f'The maximum number of attempts to '
+                                print(f'\nThe maximum number of attempts to '
                                       f'unclash model number {ndx} was '
                                       'reached. The model has been discarded.')
                     except ValueError:
@@ -1433,6 +1709,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
+                        print(f'\n---model: {ndx} residue: {num} ', end='')
                         while (check_internal_clash(coordinates,
                                                     info_table,
                                                     cutoff_distance,
@@ -1447,11 +1724,9 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                         res_num=num, chain=chainlist[i])
                             tries += 1
                             if tries < max_tries:
-                                print(f'This is the {tries}th try to unclash'
-                                      f' the psi angle for residue number '
-                                      f'{num} on model number {ndx}')
+                                print('.', end='')
                             else:
-                                print(f'The maximum number of attempts to '
+                                print(f'\nThe maximum number of attempts to '
                                       f'unclash model number {ndx} was '
                                       'reached. The model has been discarded.')
                     except ValueError:
@@ -1460,8 +1735,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         pass
             if free_residues != []:
                 pass
-        # # # ramachandran()
-        # # write_pdb()
+        write_pdb(coordinates, info_table, (base_fname + f'_model_{ndx}'))
 
 
 def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
@@ -1527,21 +1801,29 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
             coordinates[n] -= center
         # atom to be set to [0,0,z]
         axis_vector = coordinates[axis_sn].copy()
+        if np.array_equal(center, axis_vector):
+            raise ValueError('axis vector and center vector can not be the'
+                             ' same')
+
         # find angle between desired axis and yz plane
         x_ax = vector([1, 0, 0])
         y_ax = vector([0, 1, 0])
         z_ax = vector([0, 0, 1])
+
         xy = axis_vector.project_onto_normal_plane(z_ax)
-        yz_ang = y_ax.angle_between(xy)
+        crossp = np.cross(xy, y_ax).view(vector)
+        if not xy.is_nonzero():
+            yz_ang = 0
+
+        else:
+            yz_ang = y_ax.angle_between(xy)
 
         # if the Z component of the cross product is negative reverse direction
-        crossp = np.cross(xy, y_ax)
         if crossp[2] < 0:
             yz_ang = -yz_ang
 
         # rotate everything around the z axis by that angle
         for n in ser_nums:
-
             if n != center_sn:
                 coordinates[n] = coordinates[n].rotate_arround(
                     yz_ang, z_ax)
@@ -1568,6 +1850,8 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         # rotation to be e.g. +30 degrees, we specify pi/6 as the argument for
         # radial angle
         if radial_sn is not None:
+            if radial_angle is None:
+                radial_angle = 0
             radial_projection = coordinates[radial_sn].project_onto_normal_plane(
                 reference_vect)
             points_to_center = radial_projection.unitize().copy()
@@ -1717,8 +2001,6 @@ def clone_chain(coordinates, info_table, chain_list=None):
         # is stored then concetenate the two
         new_coords = coordinates[mother_chain_sn[0]: mother_chain_sn[-1]+1]
         coordinates = np.concatenate((coordinates, new_coords)).view(vector)
-        # print(coordinates)
-        # print(info_table[0])
         info_table.extend(copy.deepcopy(
             info_table[mother_chain_sn[0]: mother_chain_sn[-1]+1]))
         for i, sn in enumerate(daughter_chain_sn):
@@ -1728,7 +2010,7 @@ def clone_chain(coordinates, info_table, chain_list=None):
 
 
 def axial_symmetry(coordinates, info_table, multiplicity, radius,
-                   center_sn, axis_sn, radial_sn, radial_angle=0,
+                   center_sn, axis_sn, radial_sn, n_slices=20, radial_angle=0,
                    rot_axis=vector([0.0, 0.0, 1.0])):
     '''
 
@@ -1756,6 +2038,7 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     except ZeroDivisionError:
         print('The axis of rotation can not be the zero vector')
 
+    print(f'central_atom is at {coordinates[center_sn]} before translation')
     if multiplicity < 2 or type(multiplicity) is not int:
         print('multiplicity for axial symmetry must be an integer 2 or'
               ' greater')
@@ -1766,9 +2049,17 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     coordinates, radial_axis = orient(coordinates, info_table, center_sn,
                                       axis_sn, radial_sn, radial_angle,
                                       rot_axis)
+    print(radial_axis)
 
+    # the center of rotation is an eigenvector of the radial axis
     symmetry_center = radial_axis*radius
     # duplicate the chain, and keep a list of chains related by symmetry
+    # print(f'symmetry center {symmetry_center}')
+    # call rot_sym_clash_check to ensure that the structure that we have for
+    # our monomer would not result in a clash if n fold symmetry was applied
+    # rot_sym_clash_check(coordinates, info_table, multiplicity,
+    #                     radial_axis, rot_axis, 10.3, n_slices)
+
     chain_group = []
     chain = info_table[center_sn]['chain']
     chain_group.append(chain[0])
@@ -1776,12 +2067,10 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         for x in range(0, (multiplicity - 1)):
             coordinates, info_table, new_chain = clone_chain(
                 coordinates, info_table, chain)
-            print(new_chain)
             chain_group.append(new_chain[0])
     except ValueError:
         print(f'chain {chain} does not exist or can not be copied.'
               ' skipping.')
-    print(chain_group)
     for n, chain_id in enumerate(chain_group):
         angle = 2*np.pi/multiplicity*n
         current_chain = select(info_table, chain=chain_id)
@@ -1794,32 +2083,98 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
 
 
 if __name__ == '__main__':
-    coordinates, info_table = import_pdb('randomized_S2E_0.pdb')
-    center_sn = select(info_table, res_num=23,	atom_name='CA')
-    axis_sn = select(info_table, res_num=13, atom_name='CA')
-    radial_sn = select(info_table, res_num=22, atom_name='CA')
-    coordinates, info_table = axial_symmetry(coordinates, info_table, 5, 9,
-                                             center_sn[0], axis_sn[0],
-                                             radial_sn[0])
+    coordinates, info_table = import_pdb('test_model.pdb')
+    center_sn = select(info_table, res_num=9, chain='A', atom_name='CA')[0]
+    axis_sn = select(info_table, res_num=8, chain='A', atom_name='CA')[0]
+    radial_sn = select(info_table, res_num=9, chain='A', atom_name='O')[0]
+    # # # this makes randomized_S2E_0.pdb overlay onto 7k3g
+    # # set_phi_psi(coordinates, info_table, -58/180*np.pi,
+    # #             angle_type='phi', anchor='C', res_num=10)
+    # # set_phi_psi(coordinates, info_table, -24/180*np.pi,
+    # #             angle_type='psi', anchor='C', res_num=10)
 
-    # center = select(info_table, res_num=23,	atom_name='CA')
-    # alignment_atom = select(info_table, res_num=13, atom_name='CA')
-    # orient(coordinates, info_table, center, alignment_atom)
-    # set_phi_psi(coordinates, info_table, -np.pi/3,
-    #             res_num=[37])
-    # set_phi_psi(coordinates, info_table, -np.pi/3, angle_type='psi', anchor='N',
-    #             res_num=[36, 37])
-    # coordinates, info_table = axial_symmetry(coordinates, info_table, ['A'],
-    #                                          5, cofr=vector([4, 4, 0]),
-    #                                          rot_axis=vector([0, 0, 1]))
-    # rand1 = random.gauss(0, 0.1)
-    # rand2 = random.gauss(0, 0.1)
-    # rand3 = random.gauss(0, 2)
-    # coordinates, info_table = axial_symmetry(coordinates, info_table, ['A'],
-    #                                          5, cofr=vector([(-6 + rand1), (-3 + rand2), 0]),
-    #                                          rot_axis=vector([0+rand3, 0+rand3, 1]))
-    write_pdb(coordinates, info_table, 'pentamer_clash_test')
-    # np.savetxt('a.csv', coordinates, delimiter=',')
+    coordinates, info_table = axial_symmetry(coordinates, info_table, 5, 16,
+                                             center_sn,  axis_sn, radial_sn, 5)
+
+### SANDBOX AREA FOR TESTING ##########################
+
+    i = coordinates[:, 0]
+    j = coordinates[:, 1]
+    k = coordinates[:, 2]
+
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    v = ax.scatter3D(i, j, k, c=np.sqrt(i**2 + j**2 + k**2))
+
+    x_ax = vector([1, 0, 0])
+    y_ax = vector([0, 1, 0])
+    z_ax = vector([0, 0, 1])
+    delta_ax = vector([1, 0, 0])
+
+    # spiral_coords = [
+    #                 [0, 0, 0],
+    #                 [1, 0, 0],
+    #                 [0, 1, 0],
+    #                 [0, 0, 1],
+    #                 [1, 1, 1],
+    #                 [2, 2, 2],
+    #                 [3, 3, 3],
+    #                 [4, 4, 4],
+    #                 [5, 5, 5],
+    #                 [6, 6, 6],
+    #                 [7, 7, 7],
+    #                 [8, 8, 8]]
+    # spiral_coords = np.array(spiral_coords, dtype=float)
+    # coordinates = vector(spiral_coords)
+    # info_table = info_table[0:len(coordinates)]
+
+    z_prime = z_ax.rotate_arround(np.pi, delta_ax)
+    x_prime = x_ax.rotate_arround(np.pi, delta_ax)
+    y_prime = y_ax.rotate_arround(np.pi, delta_ax)
+
+    # tilted = cylind2cart(coordinates, x_ax, y_ax, z_ax)
+    # tilted = change_basis(coordinates, vector(
+    #     [0, 0, 0]), x_prime, y_prime, z_prime)
+
+    # fig = plt.figure()
+    # ax = plt.axes(projection='3d')
+    # xes = np.zeros([1, len(tilted)])[0]
+    # yes = np.zeros([1, len(tilted)])[0]
+    # zes = np.zeros([1, len(tilted)])[0]
+    # for i in range(len(tilted)):
+    #     xes[i] = tilted[i][0]
+    #     yes[i] = tilted[i][1]
+    #     zes[i] = tilted[i][2]
+    # v = ax.scatter3D(xes, yes, zes, c=np.sqrt(xes**2 + yes**2 + zes**2))
+    # plt.colorbar(v)
+    # ax.set_box_aspect([np.ptp(xes), np.ptp(yes), np.ptp(zes)])
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # ax.set_zlabel('Z')
+
+    # ax.set_xlim([-60, 60])
+    # ax.set_ylim([-60, 60])
+    # ax.set_zlim([-60, 60])
+
+    b2c = rot_sym_clash_check(coordinates, info_table, 5,
+                              x_ax, z_ax, 10.3, 20)
+
+    i = b2c[:, 0]
+    j = b2c[:, 1]
+    k = b2c[:, 2]
+
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    v = ax.scatter3D(i, j, k, c=np.sqrt(i**2 + j**2 + k**2))
+    plt.colorbar(v)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+
+    # coordinates, info_table = axial_symmetry(coordinates, info_table, 2, 10,
+    #                                           center_sn, axis_sn,
+    #                                           radial_sn, -0.85)
+
     #################### for aligning multiple struture files en batch #######
     #  center = select(info_table, res_num=23,	atom_name='CA')
     #   alignment_atom = select(info_table, res_num=13, atom_name='CA')
@@ -1836,6 +2191,3 @@ if __name__ == '__main__':
     #         # write_pdb(outfile_name)
     #         #print(f'{outfile_name} written sucessfully.\n')
     #         pass
-
-    # axial_symmetry(['A'], 5, vector([-5.2, -9, 0])) this produces excelent overlay
-    # over pdb 7k3g 1st submodel when applied to randomized-S2E-oriented-0.pdb
