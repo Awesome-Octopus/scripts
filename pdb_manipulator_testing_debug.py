@@ -471,31 +471,20 @@ def import_pdb(fname=None):
     return coordinates, info_table
 
 
-def plot_model(coordinates, fig=None, title='structure', plots_per_row=3):
+def plot_model(coordinates):
 
     i = coordinates[:, 0]
     j = coordinates[:, 1]
     k = coordinates[:, 2]
 
-    if fig is None:
-        fig = plt.figure()
+    fig = plt.figure()
 
-    num_subplots = len(fig.axes)
-
-    # Calculate subplot dimensions
-    rows = (num_subplots // plots_per_row) + 1
-    cols = min(num_subplots % plots_per_row + 1, plots_per_row)
-
-    # Add subplot
-    ax = fig.add_subplot(rows, cols, num_subplots + 1, projection='3d')
+    ax = plt.axes(projection='3d')
     v = ax.scatter3D(i, j, k, c=np.sqrt(i**2 + k**2))
+
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_title(title)
-    fig.tight_layout()
-
-    return fig
 
 
 def import_from_vmd(filename=None):
@@ -1298,7 +1287,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                 # f"{info_table[s]['omega']}")
 
 
-def is_clashing(coordinates, search_set_indices, threshold):
+def is_clashing(coordinates, search_set_indices, threshold, debug_mode=False, distances=None):
     '''
     given 2 lists of serial numbers, return true if any pairwise combination
     of points from coordinates associated with a serial number in A is closer
@@ -1333,11 +1322,19 @@ def is_clashing(coordinates, search_set_indices, threshold):
 
     pairs = [[a, b] for a in set_a for b in set_b]
     for pair in pairs:
+        dist = (coordinates[pair[1]] - coordinates[pair[0]]).get_length()
+        if debug_mode:
 
+            distances.append([pair, dist])
+
+    # real code
         if (coordinates[pair[1]] -
                 coordinates[pair[0]]).get_length() < threshold:
             return True
     return False
+
+    # temp code
+    # return distances
 
 
 # !!! in the future, I would like to change this to just take an atom
@@ -1355,6 +1352,9 @@ def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type,
         if len(atom_sn) > 1:
             raise ValueError('no more than 1 atom can be specified for segment'
                              'isolation')
+        # print(
+        #     f"check internal: atom_sn is {atom_sn} which is {anchor}"
+        #     f"anchored and is a {info_table[atom_sn[0]]['atom_name']}\n")
     elif angle_type == 'psi':
         # get the index of the carbonyl of the current res
         kwargs['atom_name'] = 'C'
@@ -1410,7 +1410,7 @@ def rot_sym_clash_check(coordinates, multiplicity,
     def onion_method():
 
         # get the highest and lowest values of theta
-        # an easy hueristic is that if the angle needed to contain
+        # an easy heuristic is that if the angle needed to contain
         # all the point of a monomer in an arc arround the center
         # is less than 2 pi / n, then that monomer can have n fold
         # radial symmetry without clashes between subunits
@@ -1435,6 +1435,8 @@ def rot_sym_clash_check(coordinates, multiplicity,
             height_ndx_bins = []
             numel = len(ndx_by_height)
             k = 0
+            # print(
+            #     f'n_slices: {n_slices}\nn_rings: {n_rings}\nindices by height: {ndx_by_height}')
             for i in range(n_slices):
                 height_ndx_bins.append([])
                 low_limit = min_z + i*dz
@@ -1450,7 +1452,8 @@ def rot_sym_clash_check(coordinates, multiplicity,
             # print(f'number of height index bins: {len(height_ndx_bins)}')
             # if height_ndx_bins != []:
             height_ndx_bins[-1].append(ndx_by_height[-1])
-
+            # else:
+            #     pass
             # now go divide your onion slice into onion "rings"
             angle_diffs = []
             for i in range(n_rings):
@@ -1507,33 +1510,62 @@ def rot_sym_clash_check(coordinates, multiplicity,
                                 ang_b = slice_coords[ndx_b][1]
                                 diff = convert_angle(ang_a - ang_b)
 
-                                angle_diffs.append(diff)
+                                angle_diffs.append(abs(diff))
 
-                                if diff <= -np.pi/multiplicity/2 or diff \
-                                        >= np.pi/multiplicity/2:
-
-                                    return True
+                                # REAL CODE !!!!!!!!!!!!!!!!!!!!!!!!!
+                                # if diff <= -np.pi/multiplicity/2 or diff >= np.pi/multiplicity/2:
+                                #     print(abs(ang_a - ang_b))
+                                #     return True
 
                     height_ndx_bins[i] = rad_ndx_bins
 
+        max_ndx = np.argmax(angle_diffs)
+        max_angle = angle_diffs[max_ndx]
+        # print(f'max angle diff: {max_angle}')
+
+        # print(f'min angle diff: {minangle}')
+
+        # if minangle < -np.pi/multiplicity/2 or max_angle >= np.pi/multiplicity/2:
+        #     return True
+
+        # real code !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # if the function got this far there is no clash
-        return False
+        # return False
 
-    # copy subset of coordinates and recenter on center_v
-    cylind_coords = coordinates.copy()
-    cylind_coords -= center_v
+        # temp code
+        return max_ndx, max_angle
 
+    coordinates -= center_v
+    # print(f'center v: {center_v}')
+    # print(f'radial v : {radial_v}')
+    # print(f'rot ax : {rot_ax}')
     if not rot_ax.is_nonzero():
         raise ValueError('The axis of rotation cannot be the zero vector')
     if not radial_v.is_nonzero():
         raise ValueError('The radial axis cannot be the zero vector')
 
+    # copy subset of coordinates and recenter on center_v
+    cylind_coords = coordinates.copy()
+
+    cylind_coords = cart2cylind(cylind_coords, center_v, rot_ax, radial_v)
+
+    cart = cylind2cart(cylind_coords, vector(
+        [1, 0, 0]), vector([0, 1, 0]), vector([0, 0, 1]))
+    test_pt = cart[center_sn]
+    # print(f'test point in cartesian {test_pt}')
+    # print(f'test point in cylind {cylind_coords[center_sn]}')
+    # fig = plt.figure()
+
+    # ax = plt.polar(cylind_coords[:, 1], cylind_coords[:, 2])
+
     # convert to cylindrical coordinates, and change basis so that rot_ax is
     # directly along the cylindrical axis, and all angles are relative to
     # radial_v
-    cylind_coords = cart2cylind(cylind_coords, center_v, rot_ax, radial_v)
 
     will_clash = onion_method()
+
+    # back_2_cart = cylind2cart(cylind_coords, vector([1, 1, 0]),
+    #                           vector([-1, 1, 0]), vector([0, 0, 1]))
 
     return will_clash
 
@@ -1552,14 +1584,6 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # allow heterogenous set of chains while still allowing for assumptions
     # about symmetry to be used to simplify clash checking.
     # !!!
-
-    #!!!!!!!!!!!!!!!!! take coordinates input and make new n by 3 by m array
-    # !! where m is n_structs, output each new randomized structure to
-    # !!!!!!! a new page on the array
-
-    # preallocate a 3d array to store all coordinates for efficiency
-    # structure_set = vector(np.zeros((len(coordinates), 3, n_structs)))
-    print(structure_set.shape)
 
     # symmetry_groups will be a list of lists each containing Chain letters of
     # chains which are related to each other by symmetry this will be used to
@@ -2207,10 +2231,23 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
 
         for sn in clone_sns:
             clone_coords[sn] -= symmetry_center
+            clone_coords[sn] = clone_coords[sn].rotate_arround(angle, rot_axis)
 
+        # plot_model(clone_coords)
         # check every point in the start chain against every point in its
-        return is_clashing(clone_coords, [isolated_chain_ser_nums, clone_sns],
-                           threshold)
+        # rotated clone for a clash
+        # print('isolated chain serial numbers')
+        # print(isolated_chain_ser_nums)
+        # print(f'clone chain serial numbers:\n{clone_sns}')
+
+        # temp code
+        # distances = is_clashing(clone_coords, [isolated_chain_ser_nums, clone_sns],
+        #                         threshold, debug_mode=True, distances=[])
+        # q = [item[1] for item in distances]
+        # return (min(q))
+        # real code:
+        # return is_clashing(clone_coords, [isolated_chain_ser_nums, clone_sns],
+        #                    threshold)
 
     if check_method == 'heuristic':
         if rot_sym_clash_check(coordinates, multiplicity, radial_axis,
@@ -2235,7 +2272,10 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                     coordinates[sn] -= symmetry_center
                     coordinates[sn] = coordinates[sn].rotate_arround(
                         angle, rot_axis)
+    # temp code
+    # return definitive_test()
 
+    # real code
     elif check_method == 'definitive':
         if definitive_test():
             print('clash in symmetry detected')
@@ -2262,29 +2302,132 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     return coordinates, info_table
 
 
+def test_methods(coordinates, info_table, multiplicity, rad_min, radius_step, n_step,
+                 center_sn, axis_sn, radial_sn, n_slices=20, n_rings=20,
+                 radial_angle=0, rot_axis=vector([0.0, 0.0, 1.0])):
+
+    # this function is purely to benchmark the clash functions and their reliablility
+
+    rot_axis = rot_axis.unitize()
+    min_definitive = []
+    definitive_ndx = []
+    max_heuristic = []
+    heuristic_ndx = []
+    coordinates, radial_axis = orient(coordinates, info_table, center_sn,
+                                      axis_sn, radial_sn, radial_angle,
+                                      rot_axis)
+
+    # the center of rotation is an eigenvector of the radial axis
+    angle = 2*np.pi/multiplicity
+    # this copies the entire set of coordinates and info_table with the
+    # new chain added, but is simpler given how clone chain was implemented
+
+    for step in range(n_step):
+        chain_group = []
+        chain = info_table[center_sn]['chain']
+        chain_group.append(chain[0])
+        tmp = coordinates.copy()
+        tmp_table = info_table.copy()
+
+        isolated_chain_ser_nums = select(info_table, chain=chain)
+        clone_coords, clone_info, new_chain = clone_chain(tmp, tmp_table)
+
+        clone_sns = select(clone_info, chain=new_chain)
+        radius = rad_min + radius_step*step
+        symmetry_center = radial_axis*radius
+
+        for sn in clone_sns:
+            clone_coords[sn] -= symmetry_center
+            clone_coords[sn] = clone_coords[sn].rotate_arround(angle, rot_axis)
+
+        a, b = pairwise_dist(clone_coords,
+                             [isolated_chain_ser_nums, clone_sns])
+        definitive_ndx.append(a)
+        min_definitive.append(b)
+        maxdex, maxang = rot_sym_clash_check(coordinates,
+                                             multiplicity,
+                                             radial_axis,
+                                             rot_axis,
+                                             radius, center_sn)
+
+        max_heuristic.append(maxang)
+        heuristic_ndx.append(maxdex)
+
+    return heuristic_ndx, max_heuristic, definitive_ndx, min_definitive
+
+
+def pairwise_dist(coordinates, search_set_indices):
+    '''
+    given 2 lists of serial numbers, return true if any pairwise combination
+    of points from coordinates associated with a serial number in A is closer
+    than threshold from any coordinate indicated by a serial number in list b
+
+    Parameters
+    ----------
+    coordinates : vector
+        all coordinates
+    search_set_indices : list of lists of integers
+        list containing exactly 2 lists each of which contains serial numbers.
+    threshold : float64
+        value below which to halt the process and report a clash.
+
+    Returns
+    -------
+    bool
+        if a clash was detected.
+
+    if debug mode is true distances is where the measured distances
+    will be recorded. Otherwise, only return true false
+
+
+    '''
+
+    # !!! in the future try to convert this to a heuristic kdtree algorithm
+    # which is much faster but difficult to understand and implement.
+    # right now it is brute force and ~100x slower than it could be.
+
+    # unpack the input lists
+    set_a, set_b = search_set_indices
+    distances = []
+    pairs = [[a, b] for a in set_a for b in set_b]
+    for pair in pairs:
+        dist = (coordinates[pair[1]] - coordinates[pair[0]]).get_length()
+        distances.append([pair, dist])
+
+    q = [a[1] for a in distances]
+    mindex = np.argmin(q)
+    mindist = q[mindex]
+
+    # temp code
+    return mindex, mindist
+
+
 # %% SANDBOX AREA FOR TESTING ##########################
 if __name__ == '__main__':
     coordinates, info_table = import_pdb('test_model.pdb')
-    center_sn = select(info_table, res_num=23, chain='A', atom_name='CA')[0]
-    axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
-    radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
+    center_sn = select(info_table, res_num=25, chain='A', atom_name='CA')[0]
+    axis_sn = select(info_table, res_num=15, chain='A', atom_name='CA')[0]
+    radial_sn = select(info_table, res_num=24, chain='A', atom_name='O')[0]
     # # # this makes randomized_S2E_0.pdb overlay onto 7k3g
     # set_phi_psi(coordinates, info_table, -58/180*np.pi,
     #             angle_type='phi', anchor='C', res_num=10)
     # set_phi_psi(coordinates, info_table, -24/180*np.pi,
     #             angle_type='psi', anchor='C', res_num=10)
-    radius = 10
+    radius = 11
 
-    radial_angle = 0.13
+    radial_angle = 2*np.pi/3
     multiplicity = 5
-    n_slices = 50
-    n_rings = 50
+    n_slices = 1000
+    n_rings = 1000
 
     x_ax = vector([1, 0, 0])
     y_ax = vector([0, 1, 0])
     z_ax = vector([0, 0, 1])
 
-    # coordinates, info_table = random_backbone(coordinates, info_table, 30,
+    heuristic_ndx, min_heuristic, definitive_ndx, min_definitive = test_methods(
+        coordinates, info_table, multiplicity, 10, 0.5, 10, center_sn, axis_sn, radial_sn)
+
+    # coordinates, info_table = random_backbone(coordinates, info_table, 1,
     #                                           'residues.txt')
 
     # coordinates, points_to_center = orient(
@@ -2297,21 +2440,18 @@ if __name__ == '__main__':
     # will_clash = rot_sym_clash_check(coordinates, multiplicity, x_ax,
     #                                  z_ax, radius, n_slices=10, n_rings=10,
     #                                  center_v=points_to_center*radius)
+    # plot_model(coordinates)
 
-    s_set = random_backbone(coordinates, info_table, 1, 'residues.txt')
+    # distances = axial_symmetry(coordinates, info_table,
+    #                            multiplicity, radius,
+    #                            center_sn, axis_sn,
+    #                            radial_sn, n_rings=n_rings, n_slices=n_slices,
+    #                            radial_angle=radial_angle,
+    #                            check_method='definitive')
 
-    # fig = None
-
-    # output1 = axial_symmetry(coordinates, info_table,
-    #                          multiplicity, radius,
-    #                          center_sn, axis_sn,
-    #                          radial_sn, n_rings=n_rings, n_slices=n_slices,
-    #                          radial_angle=radial_angle,
-    #                          check_method='definitive', threshold=0.1)
-
-    # if output1 is not None:
-    #     coordinates, info_table = output1
-    #     fig = plot_model(coordinates, fig)
+    # if output is not None:
+    #     coordinates, info_table = output
+    #     plot_model(coordinates)
 
     # else:
     #     print(f'you cannot have {multiplicity}-fold radial symmetry')
