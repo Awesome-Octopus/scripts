@@ -2404,8 +2404,8 @@ def pairwise_dist(coordinates, search_set_indices):
 
 # %% SANDBOX AREA FOR TESTING ##########################
 if __name__ == '__main__':
-    coordinates, info_table = import_pdb('test_model.pdb')
-    center_sn = select(info_table, res_num=25, chain='A', atom_name='CA')[0]
+    coordinates, info_table = import_pdb('hong_model.pdb')
+    center_sn = select(info_table, res_num=23, chain='A', atom_name='CA')[0]
     axis_sn = select(info_table, res_num=15, chain='A', atom_name='CA')[0]
     radial_sn = select(info_table, res_num=24, chain='A', atom_name='O')[0]
     # # # this makes randomized_S2E_0.pdb overlay onto 7k3g
@@ -2413,25 +2413,53 @@ if __name__ == '__main__':
     #             angle_type='phi', anchor='C', res_num=10)
     # set_phi_psi(coordinates, info_table, -24/180*np.pi,
     #             angle_type='psi', anchor='C', res_num=10)
-    radius = 11
 
-    radial_angle = 2*np.pi/3
+    radius = 10.290803
+
+    radial_angle = 0.1385693153627362
     multiplicity = 5
-    n_slices = 1000
-    n_rings = 1000
+    n_slices = 50
+    n_rings = 50
+    n_structs = 3
+    residue_list_filename = 'residues.txt'
 
     x_ax = vector([1, 0, 0])
     y_ax = vector([0, 1, 0])
     z_ax = vector([0, 0, 1])
 
-    heuristic_ndx, min_heuristic, definitive_ndx, min_definitive = test_methods(
-        coordinates, info_table, multiplicity, 10, 0.5, 10, center_sn, axis_sn, radial_sn)
+    for n in range(len(coordinates)):
+        coordinates[n] = coordinates[n].rotate_arround(np.pi/2, y_ax)
+    points = [coordinates[sn]
+              for sn in select(info_table, atom_name='CA', res_num=23)]
+    points = np.asarray(points)
+    cent = sum(points)/5
+    coordinates -= coordinates[center_sn]
+    coordinates = vector(coordinates)
 
-    # coordinates, info_table = random_backbone(coordinates, info_table, 1,
-    #                                           'residues.txt')
+    axis = coordinates[axis_sn]
+    cp = np.cross(axis, z_ax)
+    ang = axis.angle_between(z_ax)
+
+    for n in range(len(coordinates)):
+        coordinates[n] = vector(coordinates[n])
+        coordinates[n] = coordinates[n].rotate_arround(ang, cp)
+
+    axis = vector(coordinates[axis_sn])
+    print(axis.angle_between(z_ax))
 
     # coordinates, points_to_center = orient(
-    #     coordinates, info_table, center_sn, axis_sn, radial_sn, radial_angle)
+    #     coordinates, info_table, center_sn, axis_sn, radial_sn, radial_angle, reference_vect=axis)
+
+    # axis = coordinates[axis_sn] - coordinates[center_sn]
+    # cp  = np.cross(axis, z_ax)
+    # ang = axis.angle_between(z_ax)
+
+#     for n in range(len(coordinates)):
+#         coordinates[n] = coordinates[n].rotate_arround(ang, cp)
+
+#     axis = coordinates[axis_sn] - coordinates[center_sn]
+#     if not np.allclose(a, b)
+# axis = coordinates[axis_sn] - coordinates[center_sn]
     # print(points_to_center*radius)
 
     # while will_clash is True:

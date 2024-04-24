@@ -488,10 +488,16 @@ def plot_model(coordinates, fig=None, title='structure', plots_per_row=3):
 
     # Add subplot
     ax = fig.add_subplot(rows, cols, num_subplots + 1, projection='3d')
+    ax.set_box_aspect([1, 1, 1])
+
     v = ax.scatter3D(i, j, k, c=np.sqrt(i**2 + k**2))
+    # ax.set_xlim(-40, 40)
+    # ax.set_ylim(-40, 40)
+    # ax.set_zlim(-40, 40)
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
+
     ax.set_title(title)
     fig.tight_layout()
 
@@ -1196,8 +1202,9 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
             # if phi was there was a prev residue and phi was
             # the selected angle
+
             if bb_sn[0] is not None and angle_type == 'phi':
-                # print(info_table[bb_sn[2]])
+
                 if info_table[bb_sn[2]]['res_name'] != 'PRO':
                     center = coordinates[bb_sn[2]].copy()
                     # after centering on alpha carbon this now defines the axis
@@ -1215,9 +1222,9 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
                         coordinates[ser_num] = coordinates[ser_num].rotate_arround(
                             rot_ang, -amide)
+
                         coordinates[ser_num] += center
 
-                    get_phi_psi(coordinates, info_table, ser_num=bb_sn[2])
             if bb_sn[4] is not None and angle_type == 'psi':
                 # if we specified psi and there an amide at N +1 (ie not c term)
                 center = coordinates[bb_sn[2]].copy()
@@ -1420,7 +1427,7 @@ def rot_sym_clash_check(coordinates, multiplicity,
         v = cylind_coords[b, 1]
         threshold = 2*np.pi/multiplicity
         if abs(v - s) < threshold:
-            print(abs(v - s))
+            # print(abs(v - s))
             return False
 
         else:
@@ -1539,11 +1546,22 @@ def rot_sym_clash_check(coordinates, multiplicity,
 
 
 def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
-                    cutoff_distance=0.36, chainlist=None,
-                    symmetry_groups='all', max_tries=20, base_fname='random'):
+                    **kwargs):
 
     f = open(residue_list_filename, 'r')
     residue_list = f.readlines()
+
+    cutoff_distance = kwargs.get('cutoff_distance', 0.36)
+    chainlist = kwargs.get('chainlist', None)
+    max_tries = kwargs.get('max_tries', 20)
+    symmetry_groups = kwargs.get('symmetry_groups', 'all')
+    rot_sym_vars = kwargs.get('rot_sym_vars', None)
+    sym_clash_check = kwargs.get('sym_clash_check', False)
+    if sym_clash_check and not rot_sym_vars:
+        raise ValueError('rotational symmetry clash check requires the '
+                         'additional parameters for rot_sym_clash_check to be '
+                         "passed as the kwarg 'rot_sym_vars' : [*args], as well"
+                         ' as the key "sym_clash_check" : True')
 
     # !!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # change it to accept input file format that include the chain along with
@@ -1552,14 +1570,6 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # allow heterogenous set of chains while still allowing for assumptions
     # about symmetry to be used to simplify clash checking.
     # !!!
-
-    #!!!!!!!!!!!!!!!!! take coordinates input and make new n by 3 by m array
-    # !! where m is n_structs, output each new randomized structure to
-    # !!!!!!! a new page on the array
-
-    # preallocate a 3d array to store all coordinates for efficiency
-    # structure_set = vector(np.zeros((len(coordinates), 3, n_structs)))
-    print(structure_set.shape)
 
     # symmetry_groups will be a list of lists each containing Chain letters of
     # chains which are related to each other by symmetry this will be used to
@@ -1579,6 +1589,30 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
     # trim off the newline and convert to integer for the imported residue
     # numbers whose backbones you wish to randomize
+
+    # if your randomized backbone needs to consider self-symmetry in its clash
+    # evaluation additional parameters are needed for the hueristic clash check
+    # which should be passed as a list.
+
+    if rot_sym_vars:
+        if not type(rot_sym_vars) == list:
+            raise ValueError('parameters to be passed for optional rotational'
+                             'symmetry clash checking should be as a list '
+                             'of positional arguments')
+        # if coordinates were included as the first positional argument,
+        # remove them, we want the coordinates to pass to be evaluated at
+        # when called
+        if type(rot_sym_vars[0]) == vector:
+            rot_sym_vars.pop(0)
+
+        def symmetry_clash(coordinates):
+            return rot_sym_clash_check(coordinates, *rot_sym_vars)
+    else:
+        # if symmetry is not to be considered just return false
+
+        def symmetry_clash(coordinates):
+            return False
+
     for ndx, line in enumerate(residue_list):
         residue_list[ndx] = line.strip()
 
@@ -1704,6 +1738,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # its n terminal and c terminal segments serial numbers as a
     # sublist to keep track of associated chains
 
+    # print(anchored_residues)
     for i in range(len(sn_by_chain)):
 
         # if there are no anchors treat that whole chain of free residues as
@@ -1735,9 +1770,10 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                          'chainlist must all be equal')
 
     # print(f'the chain in this selection are\n{chainlist}\n')
-    print(f'the C-anchored segments for each chain are {c_anchored_segments}')
-    print(f'the N-anchored segments for each chain are {n_anchored_segments}')
+    # print(f'the C-anchored segments for each chain are {c_anchored_segments}')
+    # print(f'the N-anchored segments for each chain are {n_anchored_segments}')
     # loop the generation for each of the n_structs you want to generate
+
     for ndx in range(0, n_structs):
         for i in range(len(c_anchored_segments)):
 
@@ -1754,11 +1790,15 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         # retry with a different random angle
                         print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
-                        while (check_internal_clash(
-                                coordinates, info_table, cutoff_distance,
-                                angle_type='phi', anchor='C', res_num=num,
-                                chain=chainlist[i]) == True
-                                and tries < max_tries):
+                        while (symmetry_clash(coordinates)
+                               or check_internal_clash(coordinates,
+                                                       info_table,
+                                                       cutoff_distance,
+                                                       angle_type='phi',
+                                                       anchor='C',
+                                                       res_num=num,
+                                                       chain=chainlist[i])) \
+                                and tries < max_tries:
 
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1776,7 +1816,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         print(f'Cant set phi angle for N-terminus or proline'
                               f' at residue {num} of model number {ndx}. '
                               'Skipping this residue')
-
+                        pass
                     try:
                         print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
@@ -1784,14 +1824,15 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='C',
                                     res_num=num, chain=chainlist[i])
-                        while (check_internal_clash(coordinates,
-                                                    info_table,
-                                                    cutoff_distance,
-                                                    angle_type='psi',
-                                                    anchor='C',
-                                                    res_num=num,
-                                                    chain=chainlist[i]) is True
-                               and tries < 20):
+                        while (symmetry_clash(coordinates)
+                               or check_internal_clash(coordinates,
+                                                       info_table,
+                                                       cutoff_distance,
+                                                       angle_type='psi',
+                                                       anchor='C',
+                                                       res_num=num,
+                                                       chain=chainlist[i])) \
+                                and tries < max_tries:
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='psi', anchor='C',
@@ -1806,9 +1847,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     except ValueError:
                         print(f'Cant set psi for C terminus at residue {num} '
                               f'of model number {ndx}. Skipping this residue.')
-            # print('------now on to the N anchored segments----\n\n\n\n')
+                        pass
             if n_anchored_segments[i] != []:
-
                 for num in n_anchored_segments[i]:
                     try:
                         set_phi_psi(coordinates, info_table,
@@ -1816,18 +1856,19 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     angle_type='phi', anchor='N',
                                     res_num=num, chain=chainlist[i])
                         print(f'\n---model: {ndx} residue: {num} ', end='')
-                    # if your backbone adjustment resulted in a clash, retry
-                    # with a different random angle
+                        # if your backbone adjustment resulted in a clash, retry
+                        # with a different random angle
 
                         tries = 0
-                        while (check_internal_clash(coordinates,
-                                                    info_table,
-                                                    cutoff_distance,
-                                                    angle_type='phi',
-                                                    anchor='N',
-                                                    res_num=num,
-                                                    chain=chainlist[i]) is True
-                                and tries < max_tries):
+                        while (symmetry_clash(coordinates)
+                               or check_internal_clash(coordinates,
+                                                       info_table,
+                                                       cutoff_distance,
+                                                       angle_type='phi',
+                                                       anchor='N',
+                                                       res_num=num,
+                                                       chain=chainlist[i])) \
+                                and tries < max_tries:
 
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1845,22 +1886,23 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         print(f'Cant set phi angle for N-terminus or proline '
                               f'at residue {num} of model number {ndx}. '
                               'Skipping this residue.')
-
+                        pass
                     try:
                         tries = 0
+
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-                        print(f'\n---model: {ndx} residue: {num} ', end='')
-                        while (check_internal_clash(coordinates,
-                                                    info_table,
-                                                    cutoff_distance,
-                                                    angle_type='psi',
-                                                    anchor='N',
-                                                    res_num=num,
-                                                    chain=chainlist[i]) is True
-                                and tries < 20):
+                        while (symmetry_clash(coordinates)
+                               or check_internal_clash(coordinates,
+                                                       info_table,
+                                                       cutoff_distance,
+                                                       angle_type='psi',
+                                                       anchor='N',
+                                                       res_num=num,
+                                                       chain=chainlist[i])) \
+                                and tries < max_tries:
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='psi', anchor='N',
@@ -1882,7 +1924,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
 
 def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
-           radial_angle=None, reference_vect=None):
+           radial_angle=None, reference_vect=None, **kwargs):
     """
     Given a serial number for a central atom and a serial number for an atom
     to define a long axis, orient everything on that chain so that the vector
@@ -1909,6 +1951,11 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
     reference_vect : vector, optional
         If, given, an r3 vector to which the longitudinal axis should be
         alliged instead of the +z axis. The default is None.
+....**kwargs : the only option for now is 'recenter' : (True | False) that
+        determines whether center_sn should be at [0, 0, 0] in the returned
+        structure (True) or if the centering done for the rotations should be
+        undone to return it to its original position (after rotation) (False).
+        Default is False.
 
     Returns
     -------
@@ -1920,13 +1967,16 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         axis. else None is returned.
 
     """
+
+    # if not specified do not recenter the final coordinates on center_sn
+    recenter = kwargs.get('recenter', False)
     if not all(type(x) == int for x in (axis_sn, center_sn, radial_sn)):
         raise ValueError('axis_sn, center_sn, and radial_sn must each be a'
                          'single integer and a valid coordinate serial number')
 
-    # if unspecified the default is the +z axis
-    if reference_vect is None:
-        reference_vect = vector([0, 0, 1])
+    x_ax = vector([1, 0, 0])
+    y_ax = vector([0, 1, 0])
+    z_ax = vector([0, 0, 1])
 
     # check for correct input
     if radial_sn is not None:
@@ -1951,21 +2001,17 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         # the atom to be made [0,0,0]
         center = coordinates[center_sn].copy()
 
-        for n in ser_nums:
-            coordinates[n] -= center
+        coordinates -= center
         # atom to be set to [0,0,z]
         axis_vector = coordinates[axis_sn].copy()
         if np.array_equal(center, axis_vector):
             raise ValueError('axis vector and center vector can not be the'
                              ' same')
-
+        # plot_model(coordinates, None, 'after_centering')
         # find angle between desired axis and yz plane
-        x_ax = vector([1, 0, 0])
-        y_ax = vector([0, 1, 0])
-        z_ax = vector([0, 0, 1])
 
         xy = axis_vector.project_onto_normal_plane(z_ax)
-        crossp = np.cross(xy, y_ax).view(vector)
+        crossp = vector(np.cross(xy, y_ax))
         if not xy.is_nonzero():
             yz_ang = 0
 
@@ -1994,27 +2040,59 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         for n in ser_nums:
 
             if n != center_sn:
-                coordinates[n] = coordinates[n].rotate_arround(
-                    z_ang, x_ax)
+                coordinates[n] = coordinates[n].rotate_arround(z_ang, x_ax)
 
+        # if you specified somnething other than the z axis to align
+        # the longitudinal axis along
+        if reference_vect is not None:
+            crossp = vector(np.cross(z_ax, reference_vect))
+            offset_ang = z_ax.angle_between(reference_vect)
+
+            if not np.allclose(crossp, vector([0, 0, 0])):
+                test = z_ax.rotate_arround(offset_ang, crossp)
+                if np.dot(test, reference_vect) < 0:
+                    offset_ang = -offset_ang
+                for n in ser_nums:
+                    coordinates[n] = coordinates[n].rotate_arround(offset_ang,
+                                                                   crossp)
+            # plot_model(coordinates, None, 'aligned to rot_ax')
+        else:
+            reference_vect = z_ax
+            crossp = vector([0, 0, 0])
         # the radial projection vector will point to the center of
         # the subunit assembly, when the subunit is rotated by the given
         # angle arround an internal axis. If we want the vector from
         # center atom and the vector to the center of subunit
         # rotation to be e.g. +30 degrees, we specify pi/6 as the argument for
         # radial angle
-        if radial_sn is not None:
-            if radial_angle is None:
-                radial_angle = 0
-            radial_projection = coordinates[radial_sn].project_onto_normal_plane(
+
+        if radial_sn is not None and radial_sn != center_sn \
+                and radial_sn != axis_sn:
+
+            radial_proj = coordinates[radial_sn].project_onto_normal_plane(
                 reference_vect)
-            points_to_center = radial_projection.unitize().copy()
-            if radial_angle != 0:
-                for n in ser_nums:
-                    coordinates[n] = coordinates[n].rotate_arround(
-                        radial_angle, reference_vect)
+
+            if radial_proj.is_nonzero():
+                if radial_angle is not None:
+                    if radial_angle != 0:
+                        points_to_center = radial_proj.rotate_arround(
+                            -radial_angle, reference_vect).copy()
+                        points_to_center = points_to_center.unitize()
+                    else:
+                        points_to_center = radial_proj.unitize()
+                else:
+                    points_to_center = None
+            else:
+                raise ValueError('the radial vector has no component vector'
+                                 'orthogonal to the axial vector')
         else:
             points_to_center = None
+        # plot_model(coordinates, None,
+        #            'after rotation arround internal longitudinal axis')
+        if not recenter:
+
+            coordinates += center
+
     return coordinates, points_to_center
 
 
@@ -2121,13 +2199,28 @@ def clone_chain(coordinates, info_table, chain_list=None):
 
 
 def axial_symmetry(coordinates, info_table, multiplicity, radius,
-                   center_sn, axis_sn, radial_sn, n_slices=20, n_rings=20,
-                   radial_angle=0, rot_axis=vector([0.0, 0.0, 1.0]),
-                   check_method='definitive', threshold=0.36):
+                   center_sn, axis_sn, radial_sn, **kwargs):
     '''
-
         Parameters
-        ----------
+        coordinates : array of vectors
+            the molecular coordinates
+        info_table : list of dictionaries
+            list containing info on each coordinate
+        multiplicity : INT16
+            how many fold symmetry we want
+        radius : float64
+            the length of the radius from the center atom of our chain to the
+            center of rotation
+        center_sn : INT16
+            serial number specifying the atom which will be used as the basis
+            of the coordinates for the chain which we will recenter on
+        axis_sn : INT16
+            serial number specifying the atom which will be used to form the
+            longitudinal axis by the vector axis atom - center atom
+        radial_sn : INT16
+            serial number specifying the atom which will be used to form the
+            radial axis by the vector radial atom - center atom
+        kwargs ~~~~~~~~
         chains : LIST
             list containing strings indicating chains that will be
             multimerized.
@@ -2147,12 +2240,25 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         threshold : float, optional
             the distance in angstroms below which a clash should be reported.
             propogated to the clash check functions. default is 0.36
+        radial_angle : float
+            the angle in radians between the vector from canter atom to
+            rotation center and the radial axis
 
         Returns
         -------
         Coordinates, info_table.
 
         '''
+
+    # parse kwargs
+    n_slices = kwargs.get('n_slices', 20)
+    n_rings = kwargs.get('n_rings', 20)
+    cofr = kwargs.get('cofr', vector([0, 0, 0]))
+    radial_angle = kwargs.get('radial_angle', 0)
+    rot_axis = kwargs.get('rot_axis', vector([0, 0, 1]))
+    check_method = kwargs.get('check_method', 'definitive')
+    threshold = kwargs.get('threshold', 0.36)
+
     try:
         rot_axis = rot_axis.unitize()
     except ZeroDivisionError:
@@ -2165,9 +2271,9 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         raise ValueError
 
     # first orient the chain specified by your reference vector points
+
     coordinates, radial_axis = orient(coordinates, info_table, center_sn,
-                                      axis_sn, radial_sn, radial_angle,
-                                      rot_axis)
+                                      axis_sn, radial_sn, radial_angle, rot_axis, recenter=True)
 
     # the center of rotation is an eigenvector of the radial axis
     symmetry_center = radial_axis*radius
@@ -2239,6 +2345,26 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     elif check_method == 'definitive':
         if definitive_test():
             print('clash in symmetry detected')
+
+            ###### for testing only ####
+            # try:
+            #     for x in range(0, (multiplicity - 1)):
+            #         coordinates, info_table, new_chain = clone_chain(
+            #             coordinates, info_table, chain)
+            #         chain_group.append(new_chain[0])
+            # except ValueError:
+            #     print(f'chain {chain} does not exist or can not be copied.'
+            #           ' skipping.')
+            # for n, chain_id in enumerate(chain_group):
+            #     # print(f'n : {n}')
+            #     angle = 2*np.pi/multiplicity*n
+            #     current_chain = select(info_table, chain=chain_id)
+            #     for sn in current_chain:
+            #         coordinates[sn] -= symmetry_center
+            #         coordinates[sn] = coordinates[sn].rotate_arround(
+            #             angle, rot_axis)
+            # plot_model(coordinates)
+            #####################################
             return None
         else:
             try:
@@ -2250,6 +2376,7 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                 print(f'chain {chain} does not exist or can not be copied.'
                       ' skipping.')
             for n, chain_id in enumerate(chain_group):
+                # print(f'n : {n}')
                 angle = 2*np.pi/multiplicity*n
                 current_chain = select(info_table, chain=chain_id)
                 for sn in current_chain:
@@ -2262,73 +2389,119 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     return coordinates, info_table
 
 
-# %% SANDBOX AREA FOR TESTING ##########################
-if __name__ == '__main__':
-    coordinates, info_table = import_pdb('test_model.pdb')
-    center_sn = select(info_table, res_num=23, chain='A', atom_name='CA')[0]
-    axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
-    radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
-    # # # this makes randomized_S2E_0.pdb overlay onto 7k3g
-    # set_phi_psi(coordinates, info_table, -58/180*np.pi,
-    #             angle_type='phi', anchor='C', res_num=10)
-    # set_phi_psi(coordinates, info_table, -24/180*np.pi,
-    #             angle_type='psi', anchor='C', res_num=10)
-    radius = 10
+def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
 
-    radial_angle = 0.13
-    multiplicity = 5
-    n_slices = 50
-    n_rings = 50
+    # !!! NOTE !!!!! this is not intended as a general use funtion yet
+    # only useful for the pdb 7k3g substructure 1
+    # The following will perfectly allign a single helix to mei hong's model
+    # so that multimerized versions will overlay exactly in the TMD region
+    coordinates, info_table = import_pdb(fname)
+    # center_sn = select(info_table, res_num=23, chain='A', atom_name='CA')[0]
+    # axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
+    # radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
 
     x_ax = vector([1, 0, 0])
     y_ax = vector([0, 1, 0])
     z_ax = vector([0, 0, 1])
 
-    # coordinates, info_table = random_backbone(coordinates, info_table, 30,
-    #                                           'residues.txt')
+    # for some reason it mei hongs structure is tilted over 90 degrees
+    for n in range(len(coordinates)):
+        coordinates[n] = coordinates[n].rotate_arround(np.pi/2, y_ax)
+    points = [coordinates[sn]
+              for sn in select(info_table, atom_name='CA', res_num=23)]
+    points = np.asarray(points).copy()
+    center = sum(points)/5
+    ref_point = coordinates[center_sn].copy()
+    coordinates = vector(coordinates)
 
-    # coordinates, points_to_center = orient(
-    #     coordinates, info_table, center_sn, axis_sn, radial_sn, radial_angle)
-    # print(points_to_center*radius)
+    # plot_model(coordinates[select(info_table, chain='A')])
+    points_to_center = -(ref_point-center)
+    radius = points_to_center.get_length()
+    coordinates -= ref_point
+    rad_vect = coordinates[radial_sn].project_onto_normal_plane(z_ax).copy()
 
-    # while will_clash is True:
-    #     coordinates, info_table = random_backbone(coordinates, info_table, 1,
-    #                                               'residues.txt')
-    # will_clash = rot_sym_clash_check(coordinates, multiplicity, x_ax,
-    #                                  z_ax, radius, n_slices=10, n_rings=10,
-    #                                  center_v=points_to_center*radius)
+    radial_angle = points_to_center.angle_between(rad_vect)
+    axis = coordinates[axis_sn].copy()
+    cross_prod = vector(np.cross(axis, z_ax))
+    axial_offset_ang = axis.angle_between(z_ax)
+    # plot_model(coordinates, title='Hong structure')
+    return radius, radial_angle, cross_prod, axial_offset_ang
 
-    s_set = random_backbone(coordinates, info_table, 1, 'residues.txt')
 
-    # fig = None
+# %% SANDBOX AREA FOR TESTING ##########################
+# this function loads mei hongs structure and measures the exact radius
+# the exact offset of the axial angle from the z axis, and the exact radial
+# angle as defined by our set of reference atoms, so that we can apply these
+# adjustments to our structures
+coordinates, info_table = import_pdb('hong_model.pdb')
+center_sn = select(info_table, res_num=23,
+                   chain='A', atom_name='CA')[0]
+axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
+radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
+radius, radial_angle, cross_prod, offset_ang = get_struct_orientation(
+    'hong_model.pdb', center_sn, axis_sn, radial_sn)
+axis_vector = vector([0, 0, 1]).rotate_arround(-offset_ang, cross_prod)
+print(
+    f'for the reference model;\nradius: {radius}\nradial_angle: {radial_angle}\ncross_prod: {cross_prod}\noffset_angle: {offset_ang}\naxis vector: {axis_vector}\n\n')
 
-    # output1 = axial_symmetry(coordinates, info_table,
-    #                          multiplicity, radius,
-    #                          center_sn, axis_sn,
-    #                          radial_sn, n_rings=n_rings, n_slices=n_slices,
-    #                          radial_angle=radial_angle,
-    #                          check_method='definitive', threshold=0.1)
+multiplicity = 5
 
-    # if output1 is not None:
-    #     coordinates, info_table = output1
-    #     fig = plot_model(coordinates, fig)
+for w in range(200
+               ):
+    coordinates, info_table = import_pdb(
+        'test_model.pdb')
+    center_sn = select(info_table, res_num=23,
+                       chain='A', atom_name='CA')[0]
+    axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
+    radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
+    # plot_model(coordinates)
+    # for i in range(0, 3):
 
-    # else:
-    #     print(f'you cannot have {multiplicity}-fold radial symmetry')
+    # fig = plot_model(coordinates, None, 'untransformed hong monomer')
+    # # orient the structure to align reference with z
+    coordinates, points_to_center = orient(coordinates, info_table, center_sn,
+                                           axis_sn, radial_sn, np.pi, recenter=True,
+                                           )
 
-    #################### for aligning multiple struture files en batch #######
-    #  center = select(info_table, res_num=23,	atom_name='CA')
-    #   alignment_atom = select(info_table, res_num=13, atom_name='CA')
-    #    try:
-    #         orient(center, alignment_atom)
-    #     except ValueError:
-    #         print(f'!!!!!!!!!! ERROR: the input pdb file {fname} cannot be '
-    #               'properly oriented, and no oriented output structure was'
-    #               ' produced. This is likely due to formatting problems. '
-    #               'Inspect the input file !!!!!!!!!!!!!')
-    #         outfile_name = None
-    #     if outfile_name is not None:
-    #         #print('structure orientation sucessful. now writing output...')
-    #         # write_pdb(outfile_name)
-    #         #print(f'{outfile_name} written sucessfully.\n')
-    #         pass
+    # plot_model(coordinates)
+    if points_to_center is not None:
+        radial_v = points_to_center.copy()*radius
+        multimeric_center = coordinates[center_sn] + radial_v
+        coordinates -= multimeric_center
+    else:
+        print('a good radial coordinate is needed to adjust the internal radial'
+              'angles of each subunit when multimerizing')
+    # print(multimeric_center)
+
+    # print(radial_v)
+    # print(coordinates[center_sn])
+
+    # print(f'radius: {radius}')
+    # # bundle all of these together to be passed along
+    # rot_sym_vars = [multiplicity, radial_v, axis_vector,
+    #                 radius, center_sn]
+    # # print(axis_vector.is_orthogonal(radial_v))
+    # # print(rot_ax)
+    # # plot_model(coordinates)
+
+    # # the inclusion of rot_sym_vars allows the machine to check symmetry as it is randomizing
+    coordinates, info_table = random_backbone(coordinates, info_table, 1,
+                                              "residues.txt", max_tries=100,
+                                              sym_clash_check=False)
+
+    # # check_method='definitive', sym_clash_check=True, rot_sym_vars=rot_sym_vars)
+
+    output1 = axial_symmetry(coordinates, info_table,
+                             multiplicity, radius,
+                             center_sn,
+                             axis_sn, radial_sn,
+                             radial_angle=radial_angle, threshold=0.30)
+    if output1 is not None:
+        coordinates, info_table = output1
+        # plot_model(coordinates, title=f'2 pi / {w} radial angle')
+        write_pdb(coordinates, info_table,
+                  f'randomized_pentamers/randomized_pentamer_{w}')
+
+    else:
+        print(
+            f'you cannot have {multiplicity}-fold radial symmetry for model {w}')
