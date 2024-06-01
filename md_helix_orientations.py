@@ -12,30 +12,31 @@ import MDAnalysis as mda
 import argparse
 from matplotlib import pyplot as plt
 
+def parse_helix_arg(arg):
+    # Check if the argument has the correct format
+    if ':' not in arg:
+        raise argparse.ArgumentTypeError("format for --helix argument is \"start:end\"")
+    # Split the second part by ':'
+    start, end = map(int, arg.split(':'))
+    return (start, end)
 
-#parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser()
 
 # the input .gro file
-# parser.add_argument('--gro', type=str)
+parser.add_argument('-g', '--gro', type=str, required=True)
 
 # input trajectory file
-# parser.add_argument('--xtc', type=str)
+parser.add_argument('-x', '--xtc', type=str, required=True)
 
-# beginning residue of the helix
-# parser.add_argument('-b', type=int)
-begin_ctd = 55
-# ending residue of the helix
-# parser.add_argument('-e', type=int)
-end_ctd = 63
+# collect all arguments for the beginning and end of helices
+parser.add_argument('--helix', type=parse_helix_arg, action='append', required=True)
+
 
 # for parsing the flag of whether or not to align to +z or to a second helix
-#parser.add_argument('-z', type=int, Optional=True)
+parser.add_argument('-r', '--ref', type=str, required=False)
 
-# args = parser.parse_args()
+args = parser.parse_args()
 
-
-begin_tmd = 12
-end_tmd = 38
 # ################# make it so that ref_axis is assigned based on flag
 #  if <you got the argument -z followed by a single number>:
     #    process in for loop down below
@@ -45,7 +46,7 @@ end_tmd = 38
     #   set ref_axis to z
 
 # temporarily hard coded to be the first helix given
-ref_axis=1
+
 
 
 # trj = mda.Universe(args.gro, args.xtc)
@@ -59,7 +60,7 @@ ref_axis=1
 
 
 
-##############################################################
+# ##############################################################
 class vector (np.ndarray):
     def __new__(cls, vect):
         if type(vect) == list:
@@ -122,7 +123,7 @@ class vector (np.ndarray):
         v = np.dot(self, other_vector)
         f_point_tollerance = 1e-7
         if v < f_point_tollerance and \
-           v > -f_point_tollerance:
+            v > -f_point_tollerance:
             return True
         else:
             return False
@@ -190,6 +191,17 @@ class vector (np.ndarray):
         # print(
         #     f'after projection its shadow is {shadow.get_length()} long, while it is hopefully still only {self.get_length()} long')
         return shadow
+
+# check if axis was specified as the z axis or a helix
+if args.ref:
+    if args.ref.isdigit():
+        ref_axis=args.ref
+    elif args.ref == 'z':
+        ref_axis = vector([0,0,1])
+    else:
+        raise ValueError('-r or --ref flag usage: [1,2,...|z] ')
+
+
 
 trj = mda.Universe('step7_production.gro', 'step7_production.xtc')
 
@@ -279,15 +291,15 @@ for i, ts in enumerate(trj.trajectory):
             ref_axis = vector(np.array(ref_axis)) # convert input to vector
 
 
-            pass
-# *   <-----------  center of mass
-#  \
-#   \    THETA = helix angle relative to the radial axis
-#    \
-# *---* <---------xy_projection of the vector from the center of mass to
-# ^                the starting atom on the helix n-term
-# |
-# xy projection of the direction of the helix from n to c term
+#             pass
+# # *   <-----------  center of mass
+# #  \
+# #   \    THETA = helix angle relative to the radial axis
+# #    \
+# # *---* <---------xy_projection of the vector from the center of mass to
+# # ^                the starting atom on the helix n-term
+# # |
+# # xy projection of the direction of the helix from n to c term
 
 
 
@@ -295,18 +307,18 @@ for i, ts in enumerate(trj.trajectory):
 
 
 
-# Plot the original data and the transformed data
-fig = plt.figure()
+# # Plot the original data and the transformed data
+# fig = plt.figure()
 
-for i in range(len(chains)):
-    ax = fig.add_subplot(3,2,i+1)
-    indices = np.arange(len(theta[:,i]))
-    sca = ax.scatter(theta[:, i], phi[:, i], c=indices, cmap='viridis', label=f'chain {i+1}')
+# for i in range(len(chains)):
+#     ax = fig.add_subplot(3,2,i+1)
+#     indices = np.arange(len(theta[:,i]))
+#     sca = ax.scatter(theta[:, i], phi[:, i], c=indices, cmap='viridis', label=f'chain {i+1}')
 
-    plt.xlabel(r'$\theta$ (radians)')
-    plt.ylabel(r'$\phi$ (radians)')
-    ax.legend()
+#     plt.xlabel(r'$\theta$ (radians)')
+#     plt.ylabel(r'$\phi$ (radians)')
+#     ax.legend()
 
-plt.colorbar(sca, label='timestep')
-plt.tight_layout()
-plt.show()
+# plt.colorbar(sca, label='timestep')
+# plt.tight_layout()
+# plt.show()
