@@ -175,21 +175,28 @@ def parse_ref_arg(arg):
 
 parser = argparse.ArgumentParser()
 
-# the input .gro file
-parser.add_argument('-g', '--gro', type=str, required=True)
+parser.add_argument('-g', '--gro', type=str, required=True, help='the input .gro file')
 
 # input trajectory file
-parser.add_argument('-x', '--xtc', type=str, required=True)
+parser.add_argument('-x', '--xtc', type=str, required=True, help='input xtc trajectory file')
 
 # collect all arguments for the beginning and end of helices
-parser.add_argument('--helix', type=parse_helix_arg, required=True)
+parser.add_argument('--helix', type=parse_helix_arg, required=True, help='beginning and end residues of the helix in the form begin:end')
 
 # for parsing the flag of whether or not to align to +z or to a second helix
-parser.add_argument('-r', '--ref', type=parse_ref_arg, required=True)
+parser.add_argument('-r', '--ref', type=parse_ref_arg, required=True, help='beginning and end residues of the symmetry reference helix in the form begin:end, or \'z\' to use the z axis as reference')
 
-parser.add_argument('--roll', type=int, required=False)
+
+parser.add_argument('--roll', type=int, required=False, help='the residue on the helix whose c alpha c beta bond or BB to SC1 bond will serve as the metric for roll angle')
+
+
+parser.add_argument('--cg', action='store_true', required=False, help='if cg flag is passed treat the structure as martini cg atoms, else, all atom')
+
 args = parser.parse_args()
 
+############################################
+
+#trj = mda.Universe("test_pentamer.pdb")
 
 trj = mda.Universe(args.gro, args.xtc)
 
@@ -197,7 +204,10 @@ z = vector([0, 0, 1])
 
 # a list of slices each containing a protein chain
 all_atoms = trj.select_atoms('name *')
-protein = trj.select_atoms('name BB or (name SC?)')
+if args.cg:
+    protein = trj.select_atoms('name BB or (name SC?)')
+else:
+    protein = trj.select_atoms('protein')
 chains = [[protein.indices[0]]] if len(protein.indices) > 0 else []
 
 # check if every protein atom is the same resnum or is continguous with the resnum
@@ -218,17 +228,23 @@ for i, ts in enumerate(trj.trajectory):
 
     # values calculated for the reference helices this frame if one was given                            com_xy
     if type(args.ref) == tuple:
+
         # the atoms of all reference helices in all monomers
-        ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BB') 
-        
+        if args.cg:
+            ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BB')
+        else:
+            ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and backbone')
         # the center of the mass of the set of all reference helices
-        com = vector(ref_helix_set.center_of_geometry(compound='group'))                
-        
+        try:
+            com = vector(ref_helix_set.center_of_geometry(compound='group'))
+        except:
+            raise ValueError('cannot find center of geometry. (Did you forget --cg flag for a martini topology?)')
+
         # this is the center projected on to the xy axis
         xy_com = com.copy()
         xy_com[2] =0
-        
-        
+
+
         # the axis of symmetry arround which the reference helices are best arranged
         # ^
         # |
@@ -239,59 +255,72 @@ for i, ts in enumerate(trj.trajectory):
             curr_res = ref_helix_set.select_atoms(f'resnum {res}')
             # add its average to a list
             symmetry_avg.append(vector(curr_res.center_of_geometry(compound='group')))
-        
+
         symmetry_axis_pca = PCA(n_components=3)
         symmetry_axis_pca.fit(symmetry_avg)
-        
+
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # NOTE: this only works if the helices form an overall cylindrical 
+        # NOTE: this only works if the helices form an overall cylindrical
         # shape that is longer than wide it should be generalized to find
         # the overall axis of symetry between subunits
         symmetry_axis = vector(symmetry_axis_pca.components_[0])
 
-    
+
 
     for j, chain in enumerate(chains):
 
         f = all_atoms[chain]
-        
+
         # SELECT THAT ATOMS IN THE tesdt helix on that chain
-        helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and name BB')
-        
-        
+        if args.cg:
+            helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and name BB')
+        else:
+            helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and backbone')
+
         helix_bb_coords = helix_bb.positions
         e = helix_bb.select_atoms(f'resnum {args.helix[0]}')
         helix_com = vector(e.center_of_geometry(compound='group'))
-        
-        radial_vect = helix_com - com 
-            
+
+        radial_vect = helix_com - com
+
         helix_pca = PCA(n_components=3)
         helix_pca.fit(helix_bb_coords)
 
 
         helix_vect = vector(helix_pca.components_[0])
-        
+
         if args.roll: # calculate roll if a resnum was given as reference
-            
+
             hel_vect_cross_z = vector(np.cross(helix_vect, z))
-        
+            # print(hel_vect_cross_z)
             # create a vector othogonal to the helical axis, that is the shortest
             # distance to the xy plane
             ortho_hel_vect = helix_vect.rotate_arround(np.pi/2, hel_vect_cross_z)
-        
+            # print(f'ortho_hel_vect {ortho_hel_vect}')
             # the positions of the backbone and the side chain of the residue
             # specified for roll form a reference vector to calculate roll
-            bb_point = f.select_atoms(f'resnum {args.roll} and name BB')
-            sc_point = f.select_atoms(f'resnum {args.roll} and name SC1')
+
+            if args.cg:
+                bb_point = f.select_atoms(f'resnum {args.roll} and name BB')
+                sc_point = f.select_atoms(f'resnum {args.roll} and name SC1')
+            else:
+                bb_point = f.select_atoms(f'resnum {args.roll} and name CA')
+                sc_point = f.select_atoms(f'resnum {args.roll} and name CB')
+
             roll_vect = vector(sc_point.positions) - vector(bb_point.positions)
-            roll_vect = roll_vect.project_onto_normal_plane(helix_vect)[0]
+
+            roll_vect = roll_vect[0].project_onto_normal_plane(helix_vect)
             roll[i][j] = roll_vect.angle_between(ortho_hel_vect)
-        
-        
+            print(roll[i][j])
+
         # select the atoms for the reference helix of that chain if given
         if type(args.ref) == tuple:
-            ref_helix_bb = f.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BB')
-            
+
+            if args.cg:
+                ref_helix_bb = f.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BB')
+            else:
+                ref_helix_bb = f.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and backbone')
+
             # the helical axis with that index, and we want helical angles relative to each other
 
             # take the exact same code up here, but first rotate the helix 1 vector
@@ -315,7 +344,7 @@ for i, ts in enumerate(trj.trajectory):
 
             pitch[i][j] = offset_helix.angle_between(z)
             yaw[i][j] = offset_rad_vect.angle_between(offset_helix)
-
+            # print('pitch:\n',pitch[i][j],'\nyaw\n', yaw[i][j])
 
 
         # if you wanted to take the angle relative to the standard +z axis
@@ -326,10 +355,10 @@ for i, ts in enumerate(trj.trajectory):
                 xy_radial = vector([radial_vect[0], radial_vect[1], 0])
                 yaw[i][j] = xy_radial.angle_between(xy_helix)
                 pitch[i][j] = helix_vect.angle_between(z)
-                
+
             elif args.ref == 'x':
                 pass
-            
+
             elif args.ref == 'y':
                 pass
 
@@ -339,14 +368,14 @@ for i, ts in enumerate(trj.trajectory):
         elif type(args.ref) == vector: #if we give it an arbitrary axis vector
             pass
 
-# # *   <-----------  center of mass
-# #  \
-# #   \    THETA = helix angle relative to the radial axis
-# #    \
-# # *---* <---------xy_projection of the vector from the center of mass to
-# # ^                the starting atom on the helix n-term
-# # |
-# # xy projection of the direction of the helix from n to c term
+# *   <-----------  center of mass
+#  \
+#   \    THETA = helix angle relative to the radial axis
+#    \
+# *---* <---------xy_projection of the vector from the center of mass to
+# ^                the starting atom on the helix n-term
+# |
+# xy projection of the direction of the helix from n to c term
 
 
 
@@ -355,8 +384,8 @@ fig = plt.figure()
 for j in range(len(chains)):
     ax = fig.add_subplot(3,2,j+1)
     indices = np.arange(len(yaw[:,j]))
-    sca = ax.scatter(yaw[:, j], pitch[:, j], c=indices, cmap='viridis', 
-                     label=f'chain {j+1}')
+    sca = ax.scatter(yaw[:, j], pitch[:, j], c=indices, cmap='viridis',
+                      label=f'chain {j+1}')
 
     plt.xlabel(r'yaw (radians)')
     plt.ylabel(r'pitch (radians)')
@@ -370,9 +399,9 @@ plt.show()
 if args.roll:
     roll_fig = plt.figure()
     for j in range(len(chains)):
-        
+
         ax = roll_fig.add_subplot(3,2,j+1)
-        indices = np.arange(len(roll[:,j]))      
+        indices = np.arange(len(roll[:,j]))
         sca = ax.scatter(indices, roll[:, j], label=f'chain {j+1}')
 
     plt.tight_layout()
