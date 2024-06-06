@@ -302,6 +302,7 @@ for i, ts in enumerate(trj.trajectory):
         symmetry_axis = vector(symmetry_axis_pca.components_[0])
         #print(symmetry_axis)
     else:
+
         com = vector(protein.center_of_geometry(compound='group'))
 
     for j, chain in enumerate(chains):
@@ -362,9 +363,11 @@ for i, ts in enumerate(trj.trajectory):
 
 
             roll_vect = roll_vect[0].project_onto_normal_plane(helix_vect)
-            tmp_ang = roll_vect.angle_between(ortho_hel_vect)
-
-            roll[i][j] = roll_vect.angle_between(ortho_hel_vect)
+            ang = roll_vect.angle_between(ortho_hel_vect)
+            cp = vector(np.cross(ortho_hel_vect, roll_vect))
+            if cp.dot(helix_vect) <= 0:
+                ang = -ang
+            roll[i][j] = ang
             #print(roll[i][j])
 
     ################### unneccesary for now ###############################
@@ -396,10 +399,17 @@ for i, ts in enumerate(trj.trajectory):
     ###########################################################################
 
         helix_projection = helix_vect.project_onto_normal_plane(symmetry_axis)
+        ang = helix_projection.angle_between(radial_vect)
+        cp = vector(np.cross(radial_vect, helix_projection))
 
+        # if the cross product of the radial vector and the projection of the helix vector
+        # onto the normal plane of the symmetry axis is pointing away from the symmetry
+        # axis, the angle is negative
+        if cp.dot(symmetry_axis) <= 0:
+            ang = -ang
 
         pitch[i][j] = helix_vect.angle_between(symmetry_axis)
-        yaw[i][j] = radial_vect.angle_between(helix_projection)
+        yaw[i][j] = ang
         # print('pitch:\n',pitch[i][j],'\nyaw\n', yaw[i][j])
 
 
@@ -412,6 +422,7 @@ for i, ts in enumerate(trj.trajectory):
 # |
 # xy projection of the direction of the helix from n to c term
 
+
 # <codecell> plotting
 fig = plt.figure()
 
@@ -422,7 +433,7 @@ for j in range(len(chains)):
 
     plt.xlabel('yaw (degrees)')
     plt.ylabel('pitch (degrees)')
-    ax.legend()
+    plt.title(f'chain {j+1}')
 
 plt.colorbar(sca, label='timestep')
 plt.tight_layout()
@@ -447,7 +458,7 @@ if args.roll:
         sca = ax.scatter(indices, roll[:, j]*180/np.pi, label=f'chain {j+1}')
         plt.xlabel('timestep')
         plt.ylabel('roll (degrees)')
-        ax.legend()
+        plt.title(f'chain {j+1}')
 
     plt.tight_layout()
     if args.plot:
