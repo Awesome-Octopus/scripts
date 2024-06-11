@@ -18,7 +18,7 @@ from matplotlib import pyplot as plt
 ###############################
 
 # syntax:
-#   python helical_angles.py --gro input_gro_file.gro --xtc input_xtc_file.xtc
+#   python helical_angles.py --struct input_gro_file.struct --traj input_traj_file.traj
 #   --helix start:end --ref start:end --roll # --plot filename.png
 
 # ##############################################################
@@ -183,11 +183,11 @@ parser.add_argument('-p', '--plot', type=str, required=False, help='filename for
 
 
 
-# input .gro file
-parser.add_argument('-g', '--gro', type=str, required=True, help='the input .gro file')
+# input .gro or .psf file
+parser.add_argument('-s', '--struct', type=str, required=True, help='the input .gro or .psf file')
 
 # input trajectory file
-parser.add_argument('-x', '--xtc', type=str, required=True, help='input xtc trajectory file')
+parser.add_argument('-t', '--traj', type=str, required=True, help='input .xtc or .dcd trajectory file')
 
 # collect all arguments for the beginning and end of helices
 parser.add_argument('--helix', type=parse_helix_arg, required=True, help='beginning and end residues of the helix in the form begin:end')
@@ -195,9 +195,7 @@ parser.add_argument('--helix', type=parse_helix_arg, required=True, help='beginn
 # for parsing the flag of whether or not to align to +z or to a second helix
 parser.add_argument('-r', '--ref', type=parse_ref_arg, required=True, help='beginning and end residues of the symmetry reference helix in the form begin:end, or \'z\' to use the z axis as reference')
 
-
 parser.add_argument('--roll', type=int, required=False, help='the residue on the helix whose c alpha c beta bond or BB to SC1 bond will serve as the metric for roll angle')
-
 
 parser.add_argument('--cg', action='store_true', required=False, help='if cg flag is passed treat the structure as martini cg atoms, else, all atom')
 
@@ -207,7 +205,7 @@ args = parser.parse_args()
 # <codecell> structure parsing
 #trj = mda.Universe("test_pentamer.pdb")
 
-trj = mda.Universe(args.gro, args.xtc)
+trj = mda.Universe(args.struct, args.traj)
 
 z = vector([0, 0, 1])
 
@@ -216,9 +214,14 @@ all_atoms = trj.select_atoms('name *')
 
 # select protein atoms for cg models if flag set
 if args.cg:
-    protein = trj.select_atoms('name BB or (name SC?)')
-    if not protein:
-        raise ValueError('there appears to be no coarse grained protein beads present (did you mean for an all-atom structure?)')
+    if '.gro' in args.struct:
+        protein = trj.select_atoms('name BB or (name SC?)')
+        if not protein:
+            raise ValueError('there appears to be no coarse grained protein beads present (did you mean for an all-atom structure?)')
+    elif '.psf' in args.struct:
+	protein = trj.select_atoms('name BAS or (name SI?)')
+        if not protein:
+            raise ValueError('there appears to be no coarse grained protein beads present (did you mean for an all-atom structure?)')
 # otherwise, for all atom models
 else:
     protein = trj.select_atoms('protein')
@@ -244,7 +247,10 @@ roll = np.ndarray((len(trj.trajectory), len(chains)))
         # the atoms of all reference helices in all monomers
 if type(args.ref) == tuple:
     if args.cg:
-        ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BB')
+        if '.gro' in args.struct:
+            ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BB')
+        else:
+            ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and name BAS')
     else:
         ref_helix_set = all_atoms.select_atoms(f'resnum {args.ref[0]}:{args.ref[1]} and backbone')
 
@@ -348,8 +354,12 @@ for i, ts in enumerate(trj.trajectory):
             # helix vector
 
             if args.cg:
-                bb_point = f.select_atoms(f'resnum {args.roll} and name BB')
-                sc_point = f.select_atoms(f'resnum {args.roll} and name SC1')
+                if '.gro' in args.struct:  # for gromacs
+                    bb_point = f.select_atoms(f'resnum {args.roll} and name BB')
+                    sc_point = f.select_atoms(f'resnum {args.roll} and name SC1')
+                if '.psf' in args.struct:  # for NAMD
+                    bb_point = f.select_atoms(f'resnum {args.roll} and name BAS')
+                    sc_point = f.select_atoms(f'resnum {args.roll} and name SI?')
                 if not sc_point:
                     raise ValueError('the residue chosen to track helical roll does not have a side chain bead. Choose something other than Ala or Gly')
             else:
