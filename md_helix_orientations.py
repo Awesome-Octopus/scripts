@@ -219,7 +219,7 @@ if args.cg:
         if not protein:
             raise ValueError('there appears to be no coarse grained protein beads present (did you mean for an all-atom structure?)')
     elif '.psf' in args.struct:
-	protein = trj.select_atoms('name BAS or (name SI?)')
+        protein = trj.select_atoms('name BAS or (name SI?)')
         if not protein:
             raise ValueError('there appears to be no coarse grained protein beads present (did you mean for an all-atom structure?)')
 # otherwise, for all atom models
