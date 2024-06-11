@@ -257,13 +257,15 @@ if type(args.ref) == tuple:
 # if you wanted to take the angle relative to a standard axis
 elif type(args.ref) == str and args.ref in 'xyz':
 
+    # we take the negative of the vector because by convention, N to C going
+    # straight down the membrane normal is considered 0 degrees
     if args.ref == 'z':
-        symmetry_axis = vector([0,0,1])
+        symmetry_axis = -z
     elif args.ref == 'x':
-        symmetry_axis = vector([1,0,0])
+        symmetry_axis = vector([-1,0,0])
 
     elif args.ref == 'y':
-        symmetry_axis = vector([0,1,0])
+        symmetry_axis = vector([0,-1,0])
 
 # !!! ADD LATER
 # support for an arbitrary vector as the reference vector rather than
@@ -306,7 +308,13 @@ for i, ts in enumerate(trj.trajectory):
         # shape that is longer than wide it should be generalized to find
         # the overall axis of symetry between subunits
         symmetry_axis = vector(symmetry_axis_pca.components_[0])
-        #print(symmetry_axis)
+
+        # since PCA doesnt know have a directionaly to the fit,
+        # the vector might be pointing in the wrong direction.
+        # we can check this with dot product
+        if symmetry_axis.dot(z) < 0:
+            symmetry_axis = -symmetry_axis
+
     else:
 
         com = vector(protein.center_of_geometry(compound='group'))
@@ -317,26 +325,39 @@ for i, ts in enumerate(trj.trajectory):
 
         # SELECT the ATOMS IN THE test helix on that chain
         if args.cg:
-            helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and name BB')
+            if '.gro' in args.struct:
+                helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and name BB')
+
+            else:
+                helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and name BAS')
         else:
             helix_bb = f.select_atoms(f'resnum {args.helix[0]}:{args.helix[1]} and backbone')
-
+        if not helix_bb:
+            raise ValueError('No atoms match your input range for helix selection. Inspect your .gro or .psf file.')
         helix_bb_coords = helix_bb.positions
         helix_com = vector(helix_bb.center_of_geometry(compound='group'))
 
-        radial_vect = helix_com - com
 
+        # print(f'helix_com: {helix_com}')
+        radial_vect = helix_com - com
         # consider only the vector component orthogonal to the symmetry axis
         radial_vect = radial_vect.project_onto_normal_plane(symmetry_axis)
 
-
-        # now calculate the vector that describes the direction of the test
         # helix from N to C
         helix_pca = PCA(n_components=3)
         helix_pca.fit(helix_bb_coords)
 
         helix_vect = vector(helix_pca.components_[0])
-        helix_vect = -helix_vect
+
+        # by getting the first bb position - last backbone position,
+        # we get a test vector to tell if PCA is pointing in the
+        # right direction or the opposite
+        test_vect = vector(helix_bb_coords[1]) - \
+            vector(helix_bb_coords[0])
+
+        if helix_vect.dot(test_vect) < 0:
+            helix_vect = -helix_vect
+
 
         # calculate roll if a resnum was given as reference
         if args.roll:
@@ -344,7 +365,8 @@ for i, ts in enumerate(trj.trajectory):
             hel_vect_cross = vector(np.cross(helix_vect, symmetry_axis))
             # print(hel_vect_cross)
 
-            # create a vector othogonal to the helical axis, that is the shortest
+            # create a vector othogonal to the helical axis,
+            # that is the shortest
             # distance to the normal plane of the symmetry axis
             ortho_hel_vect = helix_vect.rotate_arround(np.pi/2, hel_vect_cross)
 
@@ -353,7 +375,7 @@ for i, ts in enumerate(trj.trajectory):
             # from which to calculate roll angle relative to the orthogonal
             # helix vector
 
-            if args.cg:
+            if args.cg: # for coarse grained
                 if '.gro' in args.struct:  # for gromacs
                     bb_point = f.select_atoms(f'resnum {args.roll} and name BB')
                     sc_point = f.select_atoms(f'resnum {args.roll} and name SC1')
@@ -362,7 +384,7 @@ for i, ts in enumerate(trj.trajectory):
                     sc_point = f.select_atoms(f'resnum {args.roll} and name SI?')
                 if not sc_point:
                     raise ValueError('the residue chosen to track helical roll does not have a side chain bead. Choose something other than Ala or Gly')
-            else:
+            else: # for all atom
                 bb_point = f.select_atoms(f'resnum {args.roll} and name CA')
                 sc_point = f.select_atoms(f'resnum {args.roll} and name CB')
                 if not sc_point:
