@@ -18,8 +18,8 @@ import warnings
 ###############################
 
 # syntax:
-#   python helical_angles.py --struct input_gro_file.struct --traj input_traj_file.traj
-#   --helix start:end --ref start:end --roll # --plot filename.png
+#   python md_helix_orientations.py --struct input_structure_file --traj input_traj_file
+#   --helix start:end --ref start:end | z --roll aa# --plot filename.png
 
 # ##############################################################
 class vector (np.ndarray):
