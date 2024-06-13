@@ -273,6 +273,7 @@ elif type(args.ref) == str and args.ref in 'xyz':
 elif type(args.ref) == vector: #if we give it an arbitrary axis vector
     symmetry_axis = args.ref
 
+previous_vectors = []
 ##################################################
 # <codecell> frame iteration
 # iterate over each frame
@@ -319,6 +320,7 @@ for i, ts in enumerate(trj.trajectory):
 
         com = vector(protein.center_of_geometry(compound='group'))
 
+    current_vectors=[]
     for j, chain in enumerate(chains):
 
         f = all_atoms[chain]
@@ -357,8 +359,17 @@ for i, ts in enumerate(trj.trajectory):
 
         if helix_vect.dot(test_vect) < 0:
             helix_vect = -helix_vect
-
-
+        
+        # to filter out impossibly fast transitions, consider, and massive change
+        # in vectors between 2 step as an error
+        # if i > 0 and helix_vect.dot(previous_vectors[j]) < 0:
+        #     helix_vect = -helix_vect    
+        # current_vectors.append(helix_vect)    
+        
+        # if j == len(chains)-1:
+        #     previous_vectors = current_vectors
+        #     current_vectors = []
+            
         # calculate roll if a resnum was given as reference
         if args.roll:
 
@@ -397,7 +408,7 @@ for i, ts in enumerate(trj.trajectory):
             roll_vect = roll_vect[0].project_onto_normal_plane(helix_vect)
             ang = roll_vect.angle_between(ortho_hel_vect)
             cp = vector(np.cross(ortho_hel_vect, roll_vect))
-            if cp.dot(helix_vect) <= 0:
+            if cp.dot(helix_vect) < 0:
                 ang = -ang
             roll[i][j] = ang
             #print(roll[i][j])
@@ -437,7 +448,7 @@ for i, ts in enumerate(trj.trajectory):
         # if the cross product of the radial vector and the projection of the helix vector
         # onto the normal plane of the symmetry axis is pointing away from the symmetry
         # axis, the angle is negative
-        if cp.dot(symmetry_axis) <= 0:
+        if cp.dot(symmetry_axis) < 0:
             ang = -ang
 
         pitch[i][j] = helix_vect.angle_between(symmetry_axis)
