@@ -544,3 +544,4 @@ else:
         else:
             np.savetxt(f, np.hstack((avg_pitch, avg_yaw)),
                        fmt='%.4f', newline='\n')
+print(f'{np.mean(avg_pitch)}   {np.std(avg_pitch)}   {np.mean(avg_yaw)}   {np.std(avg_yaw)}   {np.mean(avg_roll)}   {np.std(avg_roll)}')
