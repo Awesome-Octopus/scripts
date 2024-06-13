@@ -13,7 +13,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import MDAnalysis as mda
 import argparse
 from matplotlib import pyplot as plt
-
+import warnings
 
 ###############################
 
@@ -151,7 +151,7 @@ class vector (np.ndarray):
         shadow = self - a*other_vector
         return shadow
 
-def parse_helix_arg(arg):
+def parse_arg(arg):
     # Check if the argument has the correct format
     if ':' not in arg:
         raise argparse.ArgumentTypeError("format for --helix argument is \"Nterm:Cterm\"")
@@ -170,10 +170,12 @@ def parse_ref_arg(arg):
             raise ValueError('vector inputs for --ref flag should be in the form [x, y, z]')
     else:
         try:
-            start, end = parse_helix_arg(arg)
+            start, end = parse_arg(arg)
             return start, end
         except:
             return arg
+
+
 
 # <codecell> argument parsing
 parser = argparse.ArgumentParser()
@@ -190,7 +192,7 @@ parser.add_argument('-s', '--struct', type=str, required=True, help='the input .
 parser.add_argument('-t', '--traj', type=str, required=True, help='input .xtc or .dcd trajectory file')
 
 # collect all arguments for the beginning and end of helices
-parser.add_argument('--helix', type=parse_helix_arg, required=True, help='beginning and end residues of the helix in the form begin:end')
+parser.add_argument('--helix', type=parse_arg, required=True, help='beginning and end residues of the helix in the form begin:end')
 
 # for parsing the flag of whether or not to align to +z or to a second helix
 parser.add_argument('-r', '--ref', type=parse_ref_arg, required=True, help='beginning and end residues of the symmetry reference helix in the form begin:end, or \'z\' to use the z axis as reference')
@@ -199,7 +201,13 @@ parser.add_argument('--roll', type=int, required=False, help='the residue on the
 
 parser.add_argument('--cg', action='store_true', required=False, help='if cg flag is passed treat the structure as martini cg atoms, else, all atom')
 
+parser.add_argument('--txt', type=str, required=False, help='if passed, the file name to which the program will write calculated angles in a text format')
+parser.add_argument('--ts', type=parse_arg, required=False, help='if passed, the begining and end (inclusive) frames you want to look at in the form begining:end')
 args = parser.parse_args()
+
+# filter out an annoying warning that doesnt apply to CG
+if args.cg:
+    warnings.filterwarnings("ignore", category=UserWarning, module="MDAnalysis")
 
 ############################################
 # <codecell> structure parsing
@@ -238,12 +246,6 @@ for curr_ndx in protein.indices[1:]:
     else:
         chains.append([curr_ndx])
 
-# initialize storage arrays
-pitch = np.ndarray((len(trj.trajectory), len(chains)))
-yaw = np.ndarray((len(trj.trajectory), len(chains)))
-roll = np.ndarray((len(trj.trajectory), len(chains)))
-
-
         # the atoms of all reference helices in all monomers
 if type(args.ref) == tuple:
     if args.cg:
@@ -276,8 +278,30 @@ elif type(args.ref) == vector: #if we give it an arbitrary axis vector
 ##################################################
 # <codecell> frame iteration
 # iterate over each frame
-for i, ts in enumerate(trj.trajectory):
+l = len(trj.trajectory)
+if args.ts:
 
+    if args.ts[1] > l or args.ts[0] > l or args.ts[0] < 1:
+        raise IndexError('the timesteps chosen exceed the span of the trajectory')
+    else:
+        ts_range = range(args.ts[0] - 1, args.ts[1])
+        l = len(ts_range)
+else:
+    ts_range = range(len(trj.trajectory))
+
+
+# initialize storage arrays
+pitch = np.ndarray((l, len(chains)))
+avg_pitch = np.ndarray((l, 1))
+yaw = np.ndarray((l, len(chains)))
+avg_yaw = np.ndarray((l, 1))
+if args.roll:
+    roll = np.ndarray((l, len(chains)))
+    avg_roll = np.ndarray((l, 1))
+
+for i, step in enumerate(ts_range):
+
+    ts = trj.trajectory[step]
     # if not given as a static vector calculate the axis of symmetry at each frame
     if type(args.ref) == tuple:
 
@@ -399,8 +423,8 @@ for i, ts in enumerate(trj.trajectory):
             cp = vector(np.cross(ortho_hel_vect, roll_vect))
             if cp.dot(helix_vect) <= 0:
                 ang = -ang
-            roll[i][j] = ang
-            #print(roll[i][j])
+            roll[i][j] = ang*180/np.pi
+
 
     ################### unneccesary for now ###############################
 
@@ -440,10 +464,15 @@ for i, ts in enumerate(trj.trajectory):
         if cp.dot(symmetry_axis) <= 0:
             ang = -ang
 
-        pitch[i][j] = helix_vect.angle_between(symmetry_axis)
-        yaw[i][j] = ang
-        # print('pitch:\n',pitch[i][j],'\nyaw\n', yaw[i][j])
+        pitch[i][j] = helix_vect.angle_between(symmetry_axis)*180/np.pi
+        yaw[i][j] = ang*180/np.pi
 
+
+    #find the average across all subunits for that frame
+    avg_pitch[i] = np.mean(pitch[i])
+    avg_yaw[i] = np.mean(yaw[i])
+    if args.roll:
+        avg_roll[i] = np.mean(roll[i])
 
 # *   <-----------  center of mass
 #  \
@@ -456,49 +485,62 @@ for i, ts in enumerate(trj.trajectory):
 
 
 # <codecell> plotting
-fig = plt.figure()
+if not args.txt:
+    fig = plt.figure()
 
-for j in range(len(chains)):
-    ax = fig.add_subplot(3,2,j+1)
-    indices = np.arange(len(yaw[:,j]))
-    sca = ax.scatter(yaw[:, j]*180/np.pi, pitch[:, j]*180/np.pi, c=indices, cmap='viridis', label=f'chain {j+1}')
-
-    plt.xlabel('yaw (degrees)')
-    plt.ylabel('pitch (degrees)')
-    plt.title(f'chain {j+1}')
-
-plt.colorbar(sca, label='timestep')
-plt.tight_layout()
-
-if args.plot:
-    if '.' in args.plot:
-        name, ext = args.plot.split('.')
-        file= name + '_.' + ext
-        plt.savefig(file)
-    else:
-        plt.savefig(args.plot + '.png')
-else:
-    plt.show()
-
-# make a separate plot for roll if the flag was given
-if args.roll:
-    roll_fig = plt.figure()
     for j in range(len(chains)):
+        ax = fig.add_subplot(3,2,j+1)
+        indices = np.arange(len(yaw[:,j]))
+        sca = ax.scatter(yaw[:, j], pitch[:, j],
+                         c=indices, cmap='viridis', label=f'chain {j+1}')
 
-        ax = roll_fig.add_subplot(3,2,j+1)
-        indices = np.arange(len(roll[:,j]))
-        sca = ax.scatter(indices, roll[:, j]*180/np.pi, label=f'chain {j+1}')
-        plt.xlabel('timestep')
-        plt.ylabel('roll (degrees)')
+        plt.xlabel('yaw (degrees)')
+        plt.ylabel('pitch (degrees)')
         plt.title(f'chain {j+1}')
 
+    plt.colorbar(sca, label='timestep')
     plt.tight_layout()
+
     if args.plot:
         if '.' in args.plot:
             name, ext = args.plot.split('.')
-            roll_plot_file= name + '_roll.' + ext
-            plt.savefig(roll_plot_file)
+            file= name + '_.' + ext
+            plt.savefig(file)
         else:
-            plt.savefig(args.plot + '_roll.' + 'png')
+            plt.savefig(args.plot + '.png')
     else:
         plt.show()
+
+    # make a separate plot for roll if the flag was given
+    if args.roll:
+        roll_fig = plt.figure()
+        for j in range(len(chains)):
+
+            ax = roll_fig.add_subplot(3,2,j+1)
+            indices = np.arange(len(roll[:,j]))
+            sca = ax.scatter(indices, roll[:, j], label=f'chain {j+1}')
+            plt.xlabel('timestep')
+            plt.ylabel('roll (degrees)')
+            plt.title(f'chain {j+1}')
+
+        plt.tight_layout()
+        if args.plot:
+            if '.' in args.plot:
+                name, ext = args.plot.split('.')
+                roll_plot_file= name + '_roll.' + ext
+                plt.savefig(roll_plot_file)
+            else:
+                plt.savefig(args.plot + '_roll.' + 'png')
+        else:
+            plt.show()
+
+# open the file from txt argument for writing
+else:
+    with open(args.txt, 'wb') as f:
+        # np.savetxt(f, yaw)
+        if args.roll:
+            np.savetxt(f, np.hstack((avg_pitch, avg_yaw, avg_roll)),
+                       fmt='%.4f', newline='\n')
+        else:
+            np.savetxt(f, np.hstack((avg_pitch, avg_yaw)),
+                       fmt='%.4f', newline='\n')
