@@ -555,4 +555,6 @@ else:
         else:
             np.savetxt(f, np.hstack((avg_pitch, avg_yaw)),
                        fmt='%.4f', newline='\n')
+print(f'# avg angles from file: {args.traj} across frames {min(ts_range)+1} to {max(ts_range)+1}')
+print('#mean_pitch   std_pitch   mean_yaw   std_yaw   mean_roll   std_roll')   
 print(f'{np.mean(avg_pitch)}   {np.std(avg_pitch)}   {np.mean(avg_yaw)}   {np.std(avg_yaw)}   {np.mean(avg_roll)}   {np.std(avg_roll)}')
