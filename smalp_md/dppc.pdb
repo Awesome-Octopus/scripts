@@ -1,0 +1,14 @@
+CRYST1    0.000    0.000    0.000  90.00  90.00  90.00 P 1           1
+ATOM      1  NC3 DPPCX   1       3.417  -4.776  19.908  1.00  1.09      MEMB  
+ATOM      2  PO4 DPPCX   1      -1.300  -2.760  18.092  1.00  0.34      MEMB  
+ATOM      3  GL1 DPPCX   1       0.584  -4.860  14.827  1.00  0.77      MEMB  
+ATOM      4  GL2 DPPCX   1       2.701  -2.744  12.800  1.00  2.21      MEMB  
+ATOM      5  C1A DPPCX   1      -0.012  -7.197  10.623  1.00  2.95      MEMB  
+ATOM      6  C2A DPPCX   1       0.000  -7.081   6.834  1.00  2.86      MEMB  
+ATOM      7  C3A DPPCX   1      -1.506  -5.739   2.167  1.00  2.77      MEMB  
+ATOM      8  C4A DPPCX   1      -1.215  -4.843  -1.914  1.00  1.89      MEMB  
+ATOM      9  C1B DPPCX   1       0.921  -1.418   9.404  1.00  2.11      MEMB  
+ATOM     10  C2B DPPCX   1       1.338  -2.217   4.651  1.00  1.75      MEMB  
+ATOM     11  C3B DPPCX   1       2.674  -1.924  -0.007  1.00  2.83      MEMB  
+ATOM     12  C4B DPPCX   1       3.470  -4.182  -4.594  1.00  1.58      MEMB  
+END

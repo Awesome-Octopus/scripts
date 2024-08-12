@@ -1,0 +1,49 @@
+PSF
+
+       1 !NTITLE
+ REMARKS VMD-generated NAMD/X-Plor PSF structure file
+
+      12 !NATOM
+       1 MEMB 1    DPPC NC3  NC3    1.000000       72.0000           0
+       2 MEMB 1    DPPC PO4  PO4   -1.000000       72.0000           0
+       3 MEMB 1    DPPC GL1  GL1    0.000000       72.0000           0
+       4 MEMB 1    DPPC GL2  GL2    0.000000       72.0000           0
+       5 MEMB 1    DPPC C1A  C1A    0.000000       72.0000           0
+       6 MEMB 1    DPPC C2A  C2A    0.000000       72.0000           0
+       7 MEMB 1    DPPC C3A  C3A    0.000000       72.0000           0
+       8 MEMB 1    DPPC C4A  C4A    0.000000       72.0000           0
+       9 MEMB 1    DPPC C1B  C1B    0.000000       72.0000           0
+      10 MEMB 1    DPPC C2B  C2B    0.000000       72.0000           0
+      11 MEMB 1    DPPC C3B  C3B    0.000000       72.0000           0
+      12 MEMB 1    DPPC C4B  C4B    0.000000       72.0000           0
+
+      11 !NBOND: bonds
+       1       2       2       3       3       4       3       5
+       4       9       5       6       6       7       7       8
+       9      10      10      11      11      12
+
+       8 !NTHETA: angles
+       2       3       4       2       3       5       3       5       6
+       5       6       7       6       7       8       4       9      10
+       9      10      11      10      11      12
+
+       0 !NPHI: dihedrals
+
+
+       0 !NIMPHI: impropers
+
+
+       0 !NDON: donors
+
+
+       0 !NACC: acceptors
+
+
+       0 !NNB
+
+       0       0       0       0       0       0       0       0
+       0       0       0       0
+
+       1       0 !NGRP
+       0       0       0
+

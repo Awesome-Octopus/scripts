@@ -1,0 +1,7 @@
+MARTINI 2 parameters for:
+* EOL.itp - ethanol
+* LID.itp - lidocaine
+* martini_v2.0_lipids_all_201506.itp, see PCN residue - linoleic acid
+In order to add linoleic acid integrated into a bilayer, use the following trick: generate a bilayer by means of the insane script (http://www.cgmartini.nl/index.php/downloads/tools/239-insane) with PCN species added into the bilayer composition. Then, use modified parameters for PCN (see residue PCN in the modified martini_v2.0_lipids_all_201506.itp file) such that they now correspond to linoleic acid instead of the general carboxylic acid.
+
+Reference: https://doi.org/10.3390/membranes11060410

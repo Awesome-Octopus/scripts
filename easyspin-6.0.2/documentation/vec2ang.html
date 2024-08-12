@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <meta charset="utf-8">
+   <link rel="icon" href="img/eslogo196.png">
+   <link rel="stylesheet" type="text/css" href="style.css">
+   <link rel="stylesheet" href="highlight/matlab.css">
+   <script src="highlight/highlight.min.js"></script>
+   <script src="highlight/do_highlight.js"></script>
+   <title>vec2ang</title>
+</head>
+
+<body>
+
+<header>
+<ul>
+<li><img src="img/eslogo42.png">
+<li class="header-title">EasySpin
+<li><a href="index.html">Documentation</a>
+<li><a href="references.html">Publications</a>
+<li><a href="http://easyspin.org" target="_blank">Website</a>
+<li><a href="http://easyspin.org/academy" target="_blank">Academy</a>
+<li><a href="http://easyspin.org/forum" target="_blank">Forum</a>
+</ul>
+</header>
+
+<section>
+
+<div class="functitle">vec2ang</div>
+
+<p>
+Cartesian vector to polar angles conversion.
+</p>
+
+<!-- ============================================================= -->
+<div class="subtitle">Syntax</div>
+
+<pre class="matlab">
+[phi,theta] = vec2ang(v)
+angles = vec2ang(v)
+___ = vec2ang(x,y,z)
+</pre>
+
+<!-- ============================================================= -->
+<div class="subtitle">Description</div>
+
+<p>
+This function converts 3D cartesian coordinates to polar angles.
+</p>
+
+<p>
+<code>v</code> is a 3-by-N array where each column represents one cartesian vector. It can also be a Mx3 array (list of row vectors). If it is a 3x3 array, the vectors are assumed to be along <em>columns</em>.
+</p>
+
+<p>
+Alternatively, <code>v</Code> accepts short letter abbreviations to indicate one from a set of standard directions: <code>'x'</code>, <code>'y'</code>, <code>'z'</code>, <code>'xy'</code>, <code>'xz'</code>, <code>'yz'</code>, <code>'xyz'</code>, and combinations of these with a leading <code>'-'</code>, such as <code>'-z'</code>.
+</p>
+
+<p>
+Instead of providing an array of vectors in <code>'v'</code>, one can use <code>x</code>, <code>y</code>, and <code>z</code> to specify the three components of the vector or vectors separately.
+</p>
+
+<p>
+The vectors in <code>v</code> (or <code>x</code>, <code>y</code>, <code>z</code>) don't have to be normalized.
+</p>
+
+<p>
+The output <code>phi</code> denotes the counterclockwise angle between the x axis and the projection of a vector onto the xy plane (azimuth), and <code>theta</code> is the angle from the z axis down to the vector (polar angle, colatitude, inclination, elevation complement).
+</p>
+
+<p>
+If only one output argument is requested, an array <code>angles</code> is returned that contains the <code>phi</code> values in the first row and the <code>theta</code> values in the second row.
+</p>
+
+
+<!-- ============================================================= -->
+<div class="subtitle">Examples</div>
+
+<p>
+Convert a list of 5 unnormalized column vectors to angles:
+</p>
+
+<pre class="matlab">
+v = rand(3,5);
+[ph,th] = vec2ang(v);
+th*180/pi
+ph*180/pi
+</pre>
+<pre class="mloutput">
+ans =
+   71.233       86.793       33.626       65.537       28.961
+ans =
+   59.228       26.317       43.952        25.13       9.5241
+</pre>
+
+<!-- ============================================================= -->
+<div class="subtitle">See also</div>
+
+<p>
+<a class="esf" href="ang2vec.html">ang2vec</a>,
+<a class="esf" href="erot.html">erot</a>,
+<a class="esf" href="eulang.html">eulang</a>
+</p>
+
+<hr>
+</section>
+
+<footer></footer>
+
+</body>
+</html>

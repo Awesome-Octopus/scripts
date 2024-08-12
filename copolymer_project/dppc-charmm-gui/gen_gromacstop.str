@@ -1,0 +1,183 @@
+system "mkdir -p gromacs"
+system "mkdir -p gromacs/toppar"
+system "mv toppar/*.itp gromacs/toppar/"
+
+define PROT sele none end
+define nonprot sele .not. PROT end
+open write card  unit 51 name step5_resname.str
+
+! Write the resname of each residue in nonprot
+define processed sele resname W .or. resname PW .or. resname NA .or. resname CL .or. resname CA end
+label nextres
+define target sele nonprot .and. .not. processed end
+if ?nsel .gt. 0 then
+    set segid   = ?SELSEGI
+    set resname = ?SELRESN
+    set resid   = ?SELRESI
+    write title unit 51
+    *@resname
+    define processed sele processed .or. (segid @segid .and. resid @resid) end
+    goto nextres
+endif
+
+define target sele resname W end
+if ?nsel .gt. 0 then
+    calc count = 0
+    label writenextw
+        write title unit 51
+        *W
+        incr count
+    if count .lt. ?nsel goto writenextw
+endif
+
+define target sele resname PW .and. type W end
+if ?nsel .gt. 0 then
+    calc count = 0
+    label writenextpw
+        write title unit 51
+        *PW
+        incr count
+    if count .lt. ?nsel goto writenextpw
+endif
+
+define target sele resname CA end
+if ?nsel .gt. 0 then
+    calc count = 0
+    label writenextca
+        write title unit 51
+        *CA
+        incr count
+    if count .lt. ?nsel goto writenextca
+endif
+
+define target sele resname NA end
+if ?nsel .gt. 0 then
+    calc count = 0
+    label writenextna
+        write title unit 51
+        *NA
+        incr count
+    if count .lt. ?nsel goto writenextna
+endif
+
+define target sele resname CL end
+if ?nsel .gt. 0 then
+    calc count = 0 
+    label writenextcl
+        write title unit 51
+        *CL
+        incr count
+    if count .lt. ?nsel goto writenextcl
+endif
+
+close unit 51
+system "sh gen_gromacstop.sh"
+
+! Now generate gromacs index file to define the groups in mdp file
+! protein  non-protein(membrane) solute(water and ions)
+open write card  unit 51 name gromacs/index.ndx
+
+! Write index of protein
+define junk sele PROT end
+if ?nsel .gt. 0 then
+    set atomid1 ?SELATOM
+    write title unit 51
+    *[ protein ]
+
+    define junk sele .not. PROT end
+    set atomid2 ?SELATOM
+    ! if some atoms are before protein
+    if atomid2 .lt. @atomid1 stop
+    ! last atom in protein
+    calc atomid2 = @atomid2 - 1
+
+    set atomstr
+    calc count = 0
+    calc atomidstart = @atomid1
+    label nextatom
+        set atomstr @atomstr @atomidstart
+        incr count
+        if count .eq. 10 then
+            calc count 0
+            write title unit 51
+            *@atomstr
+            set atomstr
+        endif
+        incr atomidstart
+    if atomidstart .le. @atomid2 goto nextatom
+
+    if count .lt. 10 then
+        if count .gt. 0 then
+            write title unit 51
+            *@atomstr
+        endif
+    endif
+endif
+
+! Write index for membrane
+define junk sele segid MEMB end
+if ?nsel .gt. 0 then
+    set atomid1 ?SELATOM
+    write title unit 51
+    *[ membrane ]
+
+    calc atomid2 = @atomid1 + ?nsel - 1
+
+    set atomstr
+    calc count = 0
+    calc atomidstart = @atomid1
+    label nextatom1
+        set atomstr @atomstr @atomidstart
+        incr count
+        if count .eq. 10 then
+            calc count 0
+            write title unit 51
+            *@atomstr
+            set atomstr
+        endif
+        incr atomidstart
+    if atomidstart .le. @atomid2 goto nextatom1
+
+    if count .lt. 10 then
+        if count .gt. 0 then
+            write title unit 51
+            *@atomstr
+        endif
+    endif
+endif
+
+! Write index for water and ions
+define junk sele .not. (segid MEMB .or. PROT ) end
+if ?nsel .gt. 0 then
+    set atomid1 ?SELATOM
+    write title unit 51
+    *[ solute ]
+
+    define junk sele all end
+    set atomid2 ?NSEL
+
+    set atomstr
+    calc count = 0
+    calc atomidstart = @atomid1
+    label nextatom2
+        set atomstr @atomstr @atomidstart
+        incr count
+        if count .eq. 10 then
+            calc count 0
+            write title unit 51
+            *@atomstr
+            set atomstr
+        endif
+        incr atomidstart
+    if atomidstart .le. @atomid2 goto nextatom2
+
+    if count .lt. 10 then
+        if count .gt. 0 then
+            write title unit 51
+            *@atomstr
+        endif
+    endif
+endif
+
+close unit 51
+system "echo ' ' >> gromacs/index.ndx"

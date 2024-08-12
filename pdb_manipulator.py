@@ -1378,9 +1378,7 @@ def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type,
     return False
 
 
-def rot_sym_clash_check(coordinates, multiplicity,
-                        radial_v, rot_ax, radius, center_sn, n_slices=20, n_rings=20,
-                        cutoff_distance=0.36, center_v=vector([0, 0, 0])):
+def rot_sym_clash_check(coordinates, **kwargs):
     '''
     Checks if a given set of coordinates can produce radial symmetry arround
     the center vector, when multiplicity copies are arranged along the rot_ax.
@@ -1413,9 +1411,17 @@ def rot_sym_clash_check(coordinates, multiplicity,
         would result in a clash, otherwise false
 
     '''
-
+    multiplicity = kwargs.get('multiplicity', None)
+    radial_v= kwargs.get('radial_v', None)
+    rot_ax = kwargs.get('axis_vector', None)
+    radius = kwargs.get('radius', None)
+    n_slices = kwargs.get('n_slices', 20)
+    n_rings = kwargs.get('n_rings', 20)
+    cutoff_distance = kwargs.get('cutoff_distance', 0.36)
+    center_v = kwargs.get('center_v', None)
+    # print(locals())
     def onion_method():
-
+        print('--------------------------------------')
         # get the highest and lowest values of theta
         # an easy hueristic is that if the angle needed to contain
         # all the point of a monomer in an arc arround the center
@@ -1528,7 +1534,7 @@ def rot_sym_clash_check(coordinates, multiplicity,
 
     # copy subset of coordinates and recenter on center_v
     cylind_coords = coordinates.copy()
-    cylind_coords -= center_v
+    #cylind_coords -= center_v
 
     if not rot_ax.is_nonzero():
         raise ValueError('The axis of rotation cannot be the zero vector')
@@ -1550,18 +1556,22 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
     f = open(residue_list_filename, 'r')
     residue_list = f.readlines()
-
+    axis_vector = kwargs.get('axis_vector', None)
+    radial_v = kwargs.get('radial_v', None)
+    # print(f'axis vector:     {axis_vector}')
     cutoff_distance = kwargs.get('cutoff_distance', 0.36)
     chainlist = kwargs.get('chainlist', None)
     max_tries = kwargs.get('max_tries', 20)
+    center_sn = kwargs.get('center_sn', None)
+    radial_sn = kwargs.get('radial_sn', None)
+
     symmetry_groups = kwargs.get('symmetry_groups', 'all')
-    rot_sym_vars = kwargs.get('rot_sym_vars', None)
-    sym_clash_check = kwargs.get('sym_clash_check', False)
-    if sym_clash_check and not rot_sym_vars:
+    radius = kwargs.get('radius', None)
+    multiplicity = kwargs.get('multiplicity', None)
+    print(kwargs)
+    if not (center_sn and radial_sn):
         raise ValueError('rotational symmetry clash check requires the '
-                         'additional parameters for rot_sym_clash_check to be '
-                         "passed as the kwarg 'rot_sym_vars' : [*args], as well"
-                         ' as the key "sym_clash_check" : True')
+                         'additional parameters center_sn and radial_sn as kwargs')
 
     # !!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # change it to accept input file format that include the chain along with
@@ -1594,19 +1604,12 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # evaluation additional parameters are needed for the hueristic clash check
     # which should be passed as a list.
 
-    if rot_sym_vars:
-        if not type(rot_sym_vars) == list:
-            raise ValueError('parameters to be passed for optional rotational'
-                             'symmetry clash checking should be as a list '
-                             'of positional arguments')
-        # if coordinates were included as the first positional argument,
-        # remove them, we want the coordinates to pass to be evaluated at
-        # when called
-        if type(rot_sym_vars[0]) == vector:
-            rot_sym_vars.pop(0)
+    # print(f'the kwargs are:\n\n\n\{kwargs}\n\n\n\n\n')
+    if center_sn and radial_sn:
+        # print( '__________________________________________')
 
         def symmetry_clash(coordinates):
-            return rot_sym_clash_check(coordinates, *rot_sym_vars)
+            return rot_sym_clash_check(coordinates, **kwargs)
     else:
         # if symmetry is not to be considered just return false
 
@@ -2389,24 +2392,24 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     return coordinates, info_table
 
 
-def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
+def get_struct_orientation(fname):
 
     # !!! NOTE !!!!! this is not intended as a general use funtion yet
     # only useful for the pdb 7k3g substructure 1
     # The following will perfectly allign a single helix to mei hong's model
     # so that multimerized versions will overlay exactly in the TMD region
     coordinates, info_table = import_pdb(fname)
-    # center_sn = select(info_table, res_num=23, chain='A', atom_name='CA')[0]
-    # axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
-    # radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
+    center_sn = select(info_table, res_num=23, chain='A', atom_name='CA')[0]
+    axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
+    radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
 
     x_ax = vector([1, 0, 0])
     y_ax = vector([0, 1, 0])
     z_ax = vector([0, 0, 1])
 
     # for some reason it mei hongs structure is tilted over 90 degrees
-    for n in range(len(coordinates)):
-        coordinates[n] = coordinates[n].rotate_arround(np.pi/2, y_ax)
+    # for n in range(len(coordinates)):
+    #     coordinates[n] = coordinates[n].rotate_arround(np.pi/2, y_ax)
     points = [coordinates[sn]
               for sn in select(info_table, atom_name='CA', res_num=23)]
     points = np.asarray(points).copy()
@@ -2422,36 +2425,41 @@ def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
 
     radial_angle = points_to_center.angle_between(rad_vect)
     axis = coordinates[axis_sn].copy()
+
     cross_prod = vector(np.cross(axis, z_ax))
     axial_offset_ang = axis.angle_between(z_ax)
-    # plot_model(coordinates, title='Hong structure')
+    # plot_model(coordinates, title='5X29')
+    # print(locals())
     return radius, radial_angle, cross_prod, axial_offset_ang
 
-
-# %% SANDBOX AREA FOR TESTING ##########################
+# <codecell>
+###### %% SANDBOX AREA FOR TESTING ##########################
 # this function loads mei hongs structure and measures the exact radius
 # the exact offset of the axial angle from the z axis, and the exact radial
 # angle as defined by our set of reference atoms, so that we can apply these
 # adjustments to our structures
-coordinates, info_table = import_pdb('hong_model.pdb')
+coordinates, info_table = import_pdb('5x29_S2E_completed.pdb')
 center_sn = select(info_table, res_num=23,
                    chain='A', atom_name='CA')[0]
 axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
 radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
 radius, radial_angle, cross_prod, offset_ang = get_struct_orientation(
-    'hong_model.pdb', center_sn, axis_sn, radial_sn)
+    '5X29.pdb')
+# print(f'ax:      {ax}')
 axis_vector = vector([0, 0, 1]).rotate_arround(-offset_ang, cross_prod)
 print(
-    f'for the reference model;\nradius: {radius}\nradial_angle: {radial_angle}\ncross_prod: {cross_prod}\noffset_angle: {offset_ang}\naxis vector: {axis_vector}\n\n')
+    f'\n\nfor the reference model;\nradius: {radius}\nradial_angle: {radial_angle}\ncross_prod: {cross_prod}\noffset_angle: {offset_ang}\naxis vector: {axis_vector}\n\n')
 
+
+# plot_model(coordinates, title='reoriented')
 multiplicity = 5
 
-for w in range(200
-               ):
+
+for w in range(1):
     coordinates, info_table = import_pdb(
-        'test_model.pdb')
+        '5x29_S2E_completed.pdb')
     center_sn = select(info_table, res_num=23,
-                       chain='A', atom_name='CA')[0]
+                        chain='A', atom_name='CA')[0]
     axis_sn = select(info_table, res_num=13, chain='A', atom_name='CA')[0]
     radial_sn = select(info_table, res_num=21, chain='A', atom_name='O')[0]
     # plot_model(coordinates)
@@ -2460,48 +2468,56 @@ for w in range(200
     # fig = plot_model(coordinates, None, 'untransformed hong monomer')
     # # orient the structure to align reference with z
     coordinates, points_to_center = orient(coordinates, info_table, center_sn,
-                                           axis_sn, radial_sn, np.pi, recenter=True,
-                                           )
+                                            axis_sn, radial_sn, np.pi, recenter=False,
+                                            )
+    print(f'points_to_center:                    {points_to_center}')
 
-    # plot_model(coordinates)
+    #plot_model(coordinates)
     if points_to_center is not None:
+        # be sure to rotate the radial vector for each subunit in the same way the principle axis was
+        points_to_center = points_to_center.rotate_arround(-offset_ang, cross_prod)
         radial_v = points_to_center.copy()*radius
         multimeric_center = coordinates[center_sn] + radial_v
-        coordinates -= multimeric_center
+        print(f'multimeric_center:                    {multimeric_center}')
+        # coordinates -= multimeric_center
     else:
         print('a good radial coordinate is needed to adjust the internal radial'
               'angles of each subunit when multimerizing')
-    # print(multimeric_center)
 
-    # print(radial_v)
-    # print(coordinates[center_sn])
+    print(f'center coordinate: {coordinates[center_sn]}')
 
-    # print(f'radius: {radius}')
-    # # bundle all of these together to be passed along
-    # rot_sym_vars = [multiplicity, radial_v, axis_vector,
-    #                 radius, center_sn]
-    # # print(axis_vector.is_orthogonal(radial_v))
-    # # print(rot_ax)
-    # # plot_model(coordinates)
+    print(f'radius: {radius}')
+    # bundle all of these together to be passed along
+    rot_sym_vars = {'multiplicity' : multiplicity, 'radial_v' : radial_v,
+                    'axis_vector' : axis_vector,
+                  'radius' : radius, 'center_sn' : center_sn,
+                  'radial_sn' : radial_sn,
+                  'multimeric_center' : multimeric_center}
+    print(f'\naxis vector {axis_vector}')
+    print(f'\nradial_vector {radial_v}')
+    print(points_to_center.dot(multimeric_center))
+    print(axis_vector.is_orthogonal(radial_v))
 
-    # # the inclusion of rot_sym_vars allows the machine to check symmetry as it is randomizing
+
+
+#     # the inclusion of rot_sym_vars allows the machine to check symmetry as it is randomizing
     coordinates, info_table = random_backbone(coordinates, info_table, 1,
                                               "residues.txt", max_tries=100,
-                                              sym_clash_check=False)
+                                              **rot_sym_vars)
 
-    # # check_method='definitive', sym_clash_check=True, rot_sym_vars=rot_sym_vars)
+#     # check_method='definitive', sym_clash_check=True, rot_sym_vars=rot_sym_vars)
 
-    output1 = axial_symmetry(coordinates, info_table,
-                             multiplicity, radius,
-                             center_sn,
-                             axis_sn, radial_sn,
-                             radial_angle=radial_angle, threshold=0.30)
-    if output1 is not None:
-        coordinates, info_table = output1
-        # plot_model(coordinates, title=f'2 pi / {w} radial angle')
-        write_pdb(coordinates, info_table,
-                  f'randomized_pentamers/randomized_pentamer_{w}')
+#     output1 = axial_symmetry(coordinates, info_table,
+#                               multiplicity, radius,
+#                               center_sn,
+#                               axis_sn, radial_sn,
+#                               radial_angle=radial_angle, threshold=7)
+#     if output1 is not None:
+#         coordinates, info_table = output1
+#         plot_model(coordinates, title=f'2 pi / {w} radial angle')
+#     #     write_pdb(coordinates, info_table,
+#     #               f'randomized_pentamers/randomized_pentamer_{w}')
 
-    else:
-        print(
-            f'you cannot have {multiplicity}-fold radial symmetry for model {w}')
+#     # else:
+#     #     print(
+#     #         f'you cannot have {multiplicity}-fold radial symmetry for model {w}')

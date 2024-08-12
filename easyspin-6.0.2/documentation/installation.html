@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+  <html>
+<head>
+   <meta charset="utf-8">
+   <link rel="icon" href="img/eslogo196.png">
+   <link rel="stylesheet" type="text/css" href="style.css">
+   <link rel="stylesheet" href="highlight/matlab.css">
+   <script src="highlight/highlight.min.js"></script>
+   <script src="highlight/do_highlight.js"></script>
+   <title>Installation</title>
+</head>
+
+<body>
+
+<header>
+<ul>
+<li><img src="img/eslogo42.png">
+<li class="header-title">EasySpin
+<li><a href="index.html">Documentation</a>
+<li><a href="references.html">Publications</a>
+<li><a href="http://easyspin.org" target="_blank">Website</a>
+<li><a href="http://easyspin.org/academy" target="_blank">Academy</a>
+<li><a href="http://easyspin.org/forum" target="_blank">Forum</a>
+</ul>
+</header>
+
+<section>
+
+<div class="subtitle" style="margin-top:0ex;">Download</div>
+
+<p>
+<i>EasySpin</i> comes in a single zip file, containing all toolbox functions and the full documentation.
+</p>
+
+<p>
+Visit the <a target="_blank" href="http://easyspin.org">EasySpin website</a> for downloading the latest version.
+</p>
+
+<div class="subtitle" style="margin-top:0ex;">Requirements</div>
+
+<p>
+<i>EasySpin</i> requires MATLAB 9.11 (R2021b) or later on either Windows, Linux or Mac. EasySpin is not guaranteed to run on MATLAB versions older than R2021b.
+Beyond a basic MATLAB installation, no additional MATLAB toolboxes are needed to run <i>EasySpin</i>. <i>EasySpin</i> does not run on Octave (a free MATLAB clone).
+</p>
+
+<div class="subtitle">Installation</div>
+
+<ol>
+<li><b>Download and unpack EasySpin</b><br>
+Download the <i>EasySpin</i> zip file and unpack it to a folder of your choice, e.g., <code>C:\</code> or <code>/var/myfiles/</code>.
+Once unpacked, <i>EasySpin</i> is contained in a subfolder of <code>C:\</code>
+(or <code>/var/myfiles/</code> or whatever folder you chose) which in turn contains several subfolders:
+<ul>
+<li><code>easyspin-x.y.z/easyspin</code> - all the toolbox functions.
+<li><code>easyspin-x.y.z/documentation</code> - documentation, entry point is <code>index.html</code>.
+<li><code>easyspin-x.y.z/examples</code> - all examples, grouped into subfolders.
+</ul>
+
+<li><b>Tell MATLAB about EasySpin</b><br>
+Launch MATLAB and go to Home &rarr; Set Path. Remove any folders containing older <i>EasySpin</i> installations from the MATLAB search path.
+Add the <i>EasySpin</i> subfolder <code>easyspin-x.y.z/easyspin</code> to the MATLAB search path by clicking on
+"Add Folder...", selecting the <code>easyspin-x.y.z/easyspin</code> subfolder from your new EasySpin directory, and clicking on "Save".
+
+<li><b>Check EasySpin</b><br>
+In MATLAB, type <code>easyspin</code> at the command prompt. This will display information about the installed version of EasySpin. Also, it might try to compile a few files from the <code>easyspin/private</code> folder. Possibly you are asked to select or install a C compiler. See below for information on how to proceed in that case.
+
+<li><b>Documentation</b><br>
+There are several ways to access the documentation. To view the documentation of your local EasySpin installation, type <code>easyspin doc</code> in the command window, or point your web browser to <code>documentation/index.html</code> in your <i>EasySpin</i> folder and bookmark that page. Alternatively, you can go to <a href="easyspin.org">easyspin.org</a> to view the online documentation of the most recent stable version of EasySpin (which might be different from the one you installed locally).
+</ol>
+
+<div class="subtitle">Compiling mex files</div>
+
+<p>
+A few small but performance-critical parts of <i>EasySpin</i> are not written in MATLAB, but in C. These parts come pre-compiled with the EasySpin distribution, and most often you don't have to do anything.
+</p>
+
+<p>
+However, in some cases it might be necessary to recompile them for your platform using a C compiler.
+For this, run the following in the MATLAB command window:
+</p>
+
+<pre class="matlab">
+easyspin compile
+</pre>
+
+<p>
+This calls <a href="https://www.mathworks.com/help/matlab/ref/mex.html">mex</a> to compile the <code>*.c</code> files in the <code>easyspin/private</code> folder and generate the associated binary files <code>*.mexa64</code> (Linux), <code>*.mexw64</code> (Windows) or <code>*.mexmaci</code> (Mac).
+</p>
+
+<p>
+If this process throws an error, it indicates that there is a problem with the installed compiler, or that no compiler is installed. You might have to download and install a C compiler for your platform. To display information about the default C compiler used by MATLAB for compiling mex files, run the following in the MATLAB command window:
+</p>
+
+<pre class="matlab">
+mex -setup C
+</pre>
+
+<p>
+If no compiler is configured, or the configured one is not installed, do the following:
+</p>
+
+<ul>
+<li>Windows: Download and install the C compiler MinGW - see <a href="https://www.mathworks.com/support/requirements/supported-compilers.html">list of compatible compilers</a> for supported versions.
+<li>Mac: The C compiler Clang is already pre-installed on recent versions of macOS. If not, download and install <a href="https://apps.apple.com/us/app/xcode/id497799835>">Xcode</a>.
+<li>Linux: The C compiler gcc is already pre-installed on most Linux distributions.
+</ul>
+
+<p>
+You can use the <a href="https://www.mathworks.com/help/matlab/ref/mex.html">mex</a> command with <code>mex -setup</code> to change the default compiler.
+</p>
+
+<p>
+After installing the compiler, run the following again:
+</p>
+
+<pre class="matlab">
+easyspin compile
+</pre>
+
+<div class="subtitle">Note for use of EasySpin GUIs on Linux systems</div>
+
+<p>
+There are known issues for running newer Matlab GUIs on Linux systems that do not use the X windowing system, which also affects EasySpin's GUIs (e.g. the <code>esfit</code> GUI). Setting the display server for the Linux session to Xorg typically solves the problem.
+</p>
+
+<div class="subtitle">License</div>
+
+<p>
+EasySpin is free and open source software and is published under the permissive <a href="https://opensource.org/license/mit/">MIT license</a>.
+</p>
+
+</section>
+
+<footer></footer>
+
+</body>
+
+</html>

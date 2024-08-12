@@ -1,0 +1,9 @@
+;;;; Ethanol MARTINI topology
+
+[moleculetype]
+; molname       nrexcl
+  EOL           1
+
+[atoms]
+; id    type    resnr   residu  atom    cgnr    charge  smiles
+  1 	P2 	1 	EOL 	COH 	1 	0

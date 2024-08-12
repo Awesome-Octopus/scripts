@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <meta charset="utf-8">
+   <link rel="icon" href="img/eslogo196.png">
+   <link rel="stylesheet" type="text/css" href="style.css">
+   <link rel="stylesheet" href="highlight/matlab.css">
+   <script src="highlight/highlight.min.js"></script>
+   <script src="highlight/do_highlight.js"></script>
+   <title>nucfrq2d</title>
+</head>
+
+<body>
+
+<header>
+<ul>
+<li><img src="img/eslogo42.png">
+<li class="header-title">EasySpin
+<li><a href="index.html">Documentation</a>
+<li><a href="references.html">Publications</a>
+<li><a href="http://easyspin.org" target="_blank">Website</a>
+<li><a href="http://easyspin.org/academy" target="_blank">Academy</a>
+<li><a href="http://easyspin.org/forum" target="_blank">Forum</a>
+</ul>
+</header>
+
+<section>
+
+<div class="functitle">nucfrq2d</div>
+
+<p>
+HYSCORE powder spectrum outline.
+</p>
+
+<!-- ====================================================== -->
+<div class="subtitle">Syntax</div>
+
+<pre class="matlab">
+nucfrq2d(Sys,B0)
+nucfrq2d(Sys,B0,tauvec)
+</pre>
+
+<!-- ====================================================== -->
+<div class="subtitle">Description</div>
+
+<p>
+<code>nucfrq2d</code> computes and plots the outline of a HYSCORE powder spectrum.
+Peaks positions are accurate, but all peak intensities are set to 1.
+The plot thus only shows correlation patterns.
+</p>
+
+<p>
+<code>Sys</code> is the spin system structure defining the spin Hamiltonian.
+In <code>Sys</code>, the electron spin must be 1/2.
+</p>
+
+<p>
+<code>B0</code> gives the magnitude of the external magnetic field, in mT.
+</p>
+
+<p>
+<code>tauvec</code> is a vector of tau values, in microseconds.
+It is used to plot blind spot regions, where the ESEEM signal is suppressed.
+</p>
+
+<p>
+The plot shows two octants as is standard for HYSCORE spectra and displays all nuclear frequency correlations in color.
+Peaks that correlate frequencies from the &alpha; electron manifold on the horizontal axis with &beta; frequencies on the vertical axis are in green, the &beta;-&alpha;
+correlations are in red.
+</p>
+
+<p>
+If <code>tauvec</code> is given, a gray-shaded background indicating peak suppression regions (blind spots) is shown.
+White indicates no suppression, the darker the gray the stronger the suppression.
+</p>
+
+<!-- ====================================================== -->
+<div class="subtitle">Examples</div>
+
+<p>
+Correlation plots can be quite aesthetic. For a fantasy system containing one electron and one <sup>14</sup>N nucleus
+</p>
+
+<pre class="matlab">
+Sys.g = 2;
+Sys.Nucs = '14N';
+Sys.A = 2 + [-1 -1 2]*2;  % MHz
+Sys.Q = [-1.2 -0.8 2]*1.2;  % MHz
+ 
+nucfrq2d(Sys,350);  
+</pre>
+
+<p>
+To observe the peaks due to weakly coupled hydrogens, one best uses several tau values related to the Larmor frequency of hydrogen
+</p>
+
+<pre class="matlab">
+ Sys.g = 2;
+ Sys.Nucs = '1H';
+ Sys.A = [-1 -1 2]*4 + 2;   % MHz
+ 
+ B0 = 350;   % mT
+ nuL = larmorfrq(Sys.Nucs,B0);   % MHz
+ tauvec = [1.5 2.1]./nuL;   % µs
+ 
+ nucfrq2d(Sys,B0,tauvec)
+ </pre>
+
+<!-- ====================================================== -->
+<div class="subtitle">See also</div>
+
+<p>
+<a class="esf" href="evolve.html">evolve</a>,
+<a class="esf" href="salt.html">salt</a>
+</p>
+
+<hr>
+</section>
+
+<footer></footer>
+
+</body>
+
+</html>

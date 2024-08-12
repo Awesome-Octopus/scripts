@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <meta charset="utf-8">
+   <link rel="icon" href="img/eslogo196.png">
+   <link rel="stylesheet" type="text/css" href="style.css">
+   <link rel="stylesheet" href="highlight/matlab.css">
+   <script src="highlight/highlight.min.js"></script>
+   <script src="highlight/do_highlight.js"></script>
+   <title>plegendre</title>
+</head>
+
+<body>
+
+<header>
+<ul>
+<li><img src="img/eslogo42.png">
+<li class="header-title">EasySpin
+<li><a href="index.html">Documentation</a>
+<li><a href="references.html">Publications</a>
+<li><a href="http://easyspin.org" target="_blank">Website</a>
+<li><a href="http://easyspin.org/academy" target="_blank">Academy</a>
+<li><a href="http://easyspin.org/forum" target="_blank">Forum</a>
+</ul>
+</header>
+
+<section>
+
+<div class="functitle">plegendre</div>
+
+<p>
+Legendre polynomials and associated Legendre polynomials.
+</p>
+
+<!-- ============================================================= -->
+<div class="subtitle">Syntax</div>
+
+<pre class="matlab">
+v = plegendre(L,z)
+v = plegendre(L,M,z)
+v = plegendre(L,M,z,CSphase)
+</pre>
+
+<!-- ============================================================= -->
+<div class="subtitle">Description</div>
+
+<p>
+With two input arguments, <code>plegendre</code> returns the value(s) of the Legendre polynomial of degree L (with L &ge; 0).
+</p>
+
+<p>
+With three or four input arguments, <code>plegendre</code> calculates the value(s) of the associated Legendre polynomial of degree L (with L &ge; 0) and order M (with -L &le; M &le; L).
+</p>
+
+<p>
+<code>z</code> are the values for which to evaluate the polynomial. <code>z</code> must satisfy -1&le; z &le; +1 and can be a scalar or an array.
+</p>
+
+<p>
+The optional input <code>CSphase</code> (<code>true</code> or <code>false</code>) specifies whether the Condon-Shortley phase (-1)<sup>M</sup> should be included (<code>true</code>) or not (<code>false</code>). The default is <code>true</code>.
+</p>
+   
+
+<!-- ============================================================= -->
+<div class="subtitle">Algorithm</div>
+
+<p>
+<code>plegendre</code> uses recurrence relations to compute the values, as described e.g. in Press et al, Numerical Recipes in C++ (2002).
+
+<!-- ============================================================= -->
+<div class="subtitle">See also</div>
+
+<p>
+<a class="esf" href="clebschgordan.html">clebschgordan</a>,
+<a class="esf" href="spherharm.html">spherharm</a>,
+<a class="esf" href="wigner3j.html">wigner3j</a>,
+<a class="esf" href="wigner6j.html">wigner6j</a>,
+<a class="esf" href="wigner6j.html">wignerd</a>
+</p>
+
+<hr>
+</section>
+
+<footer></footer>
+
+</body>
+</html>
