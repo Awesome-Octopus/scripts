@@ -9,7 +9,6 @@ Created on Thu Oct  3 00:47:16 2024
 # %% I/O functions
 import numpy as np
 from vector_class import vector
-import matplotlib as mpl
 from Bio.PDB.PDBParser import PDBParser
 # how we will import the raw text
 # from Bio.PDB import PDBIO

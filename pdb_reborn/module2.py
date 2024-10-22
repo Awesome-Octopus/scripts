@@ -6,6 +6,7 @@ Created on Thu Oct  3 00:52:03 2024
 @author: andrew
 """
 
+# %% getter/setter functions
 import random
 # how we will import the raw text
 # from Bio.PDB import PDBIO
@@ -1326,9 +1327,8 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         ser_nums = select(info_table, chain=ch, model_name=mod, submodel=sub)
         # the atom to be made [0,0,0]
         center = coordinates[center_sn].copy()
-        for sn in ser_nums:
-            coordinates[sn] -= center
 
+        coordinates -= center
         # atom to be set to [0,0,z]
         axis_vector = coordinates[axis_sn].copy()
         if np.array_equal(center, axis_vector):
@@ -1352,7 +1352,7 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         # rotate everything around the z axis by that angle
         for n in ser_nums:
             if n != center_sn:
-
+                print(f'rotation is applied')
                 coordinates[n] = coordinates[n].rotate_arround(
                     yz_ang, z_ax)
 
@@ -1373,9 +1373,7 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         # if you specified somnething other than the z axis to align
         # the longitudinal axis along
         if reference_vect is not None:
-
             crossp = vector(np.cross(z_ax, reference_vect))
-
             offset_ang = z_ax.angle_between(reference_vect)
 
             if not np.allclose(crossp, vector([0, 0, 0])):
@@ -1387,7 +1385,6 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
                                                                    crossp)
             # plot_model(coordinates, None, 'aligned to rot_ax')
         else:
-
             reference_vect = z_ax
             crossp = vector([0, 0, 0])
         # the radial projection vector will point to the center of
@@ -1396,42 +1393,21 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
         # center atom and the vector to the center of subunit
         # rotation to be e.g. +30 degrees, we specify pi/6 as the argument for
         # radial angle
-
+        # print(f'hey over here, radial sn is {radial_sn}, and center sn is {center_sn}, and axis sn is {axis_sn}')
         if radial_sn is not None and radial_sn != center_sn \
                 and radial_sn != axis_sn:
 
-            print(coordinates[radial_sn])
             radial_proj = coordinates[radial_sn].project_onto_normal_plane(
                 reference_vect)
-            print(f'if this isnt 0 in the z dimension something is wrong: {radial_proj}')
             assert not np.allclose(radial_proj, vector([0,0,0]))
+
             if radial_proj.is_nonzero():
                 if radial_angle is not None:
-
-                    b = -coordinates[radial_sn]
-                    x_prime = b.project_onto_normal_plane(reference_vect)
-                    curr_rad_ang = radial_proj.angle_between(x_prime)
-                    print(f'ffs, this better be pi: {curr_rad_ang}')
-                    turn_by = radial_angle - curr_rad_ang
-                    print(f'were turning around the helix being orienteds internal axis by {turn_by}')
-                    if not np.isclose(turn_by, 0):
-                        print(f'the radial projection: {radial_proj}')
-                        print(f' from orient the ref v is {reference_vect}')
-
-                        # if a radial angle was given rotate the selected points
-                        # arround their long axis, which is now alligned
-                        # to the reference axis, so that the radial vector
-                        # and points to center vector subtend the desired
-                        # radial angle
-                        for sn in ser_nums:
-                            coordinates[sn] = coordinates[sn].rotate_arround(
-                                turn_by, reference_vect)
-
+                    if radial_angle != 0:
+                        print(f'we got to this condition')
                         points_to_center = radial_proj.rotate_arround(
-                            turn_by, reference_vect).copy()
+                            -radial_angle, reference_vect).copy()
                         points_to_center = points_to_center.unitize()
-
-
                     else:
                         points_to_center = radial_proj.unitize()
                 else:
@@ -1447,7 +1423,6 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
 
             coordinates += center
 
-    print(f' from orient points to center is {points_to_center}')
     return coordinates, points_to_center
 
 
@@ -1762,6 +1737,7 @@ def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
     y_ax = vector([0, 1, 0])
     z_ax = vector([0, 0, 1])
 
+    # for some reason it mei hongs structure is tilted over 90 degrees
 
     # get all the center reference points across all monomers
     c = select(info_table, ser_num=center_sn)[0]
@@ -1770,33 +1746,25 @@ def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
     points = [coordinates[sn] for sn in select(info_table,
                                                atom_name=c['atom_name'],
                                                res_num=c['res_num'])]
+
     points = np.asarray(points).copy()
-    # print(f'the reference points across all monomers of the reference structure:\n{points}')
+    # print(points)
     center = sum(points)/len(points)
     # print(f'the center is at {center}')
     ref_point = coordinates[center_sn].copy()
     # print(f'the reference point for chain A is {ref_point}')
     coordinates = vector(coordinates)
 
-    points_to_center = center - ref_point
-    # print(f'this should point to the center, and shouldnt be a zero vector except for monomer input:\n{points_to_center}')
+    #plot_model(coordinates[select(info_table, chain='A')])
+    points_to_center = -(ref_point-center)
+    # print(f'this vector should point from the ref point to center {points_to_center}')
+    radius = points_to_center.get_length()
+    coordinates -= ref_point
+    rad_vect = coordinates[radial_sn].project_onto_normal_plane(z_ax).copy()
+    # print(f'the radial vector is {rad_vect}')
 
-    # if you are dealing with only a monomer then there is no radius or radial angle
-    try:
-        radius = points_to_center.get_length()
-
-        coordinates -= ref_point
-        rad_vect = coordinates[radial_sn].project_onto_normal_plane(z_ax).copy()
-        # print(f'the radial vector is {rad_vect}')
-
-        radial_angle = points_to_center.angle_between(rad_vect)
-        # print(f'the radial angle is {radial_angle}')
-    except:
-        radius = None
-        radial_angle = None
-        # print('No radius or radial angle assigned for orientation of a monomer as a reference')
-
-
+    radial_angle = points_to_center.angle_between(rad_vect)
+    # print(f'the radial angle is {radial_angle}')
     axis = coordinates[axis_sn].copy()
 
     cross_prod = vector(np.cross(axis, z_ax))
