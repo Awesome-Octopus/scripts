@@ -131,7 +131,7 @@ fig.UserData.fontSize = uispinner(fig, "Limits", [1 100], "Position", [225 355 6
 
 uilabel (fig,'Position', [35 300 250 50], 'Text', 'Number of points for smoothing:');
 fig.UserData.smoothingPts = uispinner(fig, "Limits", [0 15], "Position", [225 312 65 26], ...
-        'Value', 3, 'ValueChangedFcn', @(src, event)update(ax, fig));
+        'Value', 0, 'ValueChangedFcn', @(src, event)update(ax, fig));
 
 uilabel (fig,'Position', [35 270 250 22], 'Text', 'Horizontal staggering (G):');
 fig.UserData.horizStagger = uispinner(fig, "Position",[225, 270, 65 26],...
@@ -156,7 +156,7 @@ if ispc
         'ValueChangedFcn', @(src, event)update(ax, fig));
 else
     fig.UserData.pallete = uispinner(fig, 'position', [130 120 65 22], ...
-        'Value', 1, 'Step', 1, 'Limits', [1 numel(fig.UserData.colorSchemes)],...
+        'Value', 1, 'Step', 1, 'Limits', [1 numel(fig.UserData.colorSchemes)], ...
     'ValueChangedFcn', @(src, event)update(ax, fig));
 end
 
@@ -165,9 +165,14 @@ fig.UserData.axes = uiswitch(fig, 'slider', 'position', [240 170 200 22], ...
     'ItemsData', [false true], 'Items', {'off', 'on'}, ...
     'ValueChangedFcn', @(src, event)update(ax, fig));
 
+uilabel(fig, 'Position', [237 140 100 22], 'Text', 'Normalize:');
+fig.UserData.norm = uiswitch(fig, 'slider', 'position', [240 118 200 22], ...
+    'ItemsData', [false true], 'Items', {'off', 'on'}, 'Value', true, ...
+    'ValueChangedFcn', @(src, event)update(ax, fig));
+
 if ispc % <-- dropdowns only work on PC not linux .
     uilabel(fig, 'Position', [70 80 100 22], 'Text', 'Annotation style:');
-    fig.UserData.annotation = uidropdown(fig,"Value", 'labels', 'position',...
+    fig.UserData.annotation = uidropdown(fig,"Value", 'labels', 'position', ...
     [60 60 100 22], 'Items', {'labels', 'legend', 'none'}, ...
     'ValueChangedFcn', @(src, event)update(ax, fig));
 
@@ -179,7 +184,7 @@ else
 end 
 
 uilabel(fig, 'Position', [220 80 100 22], 'Text', 'label offset');
-fig.UserData.labelOffset = uispinner(fig, 'Position', [210 60 85 22], 'Value', 0.1,...
+fig.UserData.labelOffset = uispinner(fig, 'Position', [210 60 85 22], 'Value', 0.1, ...
     'Step', 0.01, 'ValueChangedFcn', @(src, event)update(ax, fig));
 
 
@@ -195,6 +200,12 @@ for i =1:numel(spectra)
 end
 
 hold(ax, "off");
+
+
+% this creates a button down function that gets a callback whenever a click
+% is made in the plotting area
+%ax.ButtonDownFcn = @(src, event) ParseClick (src, event, ax, fig);
+
 
 % call update automatically for initial plotting with spectra in an
 % unmodified order, future calls to swap will reorder the array of raw
@@ -221,8 +232,7 @@ end
 %% Changes the plotting parameters after reordering is done. 
 function update (ax, fig)        
 
-    processed_spectra = process_spectra(fig.UserData.spectra, ...
-        fig.UserData.smoothingPts.Value);
+    processed_spectra = process_spectra(fig);
     staggered_spectra = stagger (processed_spectra, ...
         fig.UserData.horizStagger.Value, fig.UserData.vertStagger.Value); 
 
@@ -257,7 +267,6 @@ function update (ax, fig)
         ax.Children(2*i-1).Interpreter = "none";
         ax.Children(2*i-1).Visible = "on";
 
-        
         end
         legend(ax,'off');
     elseif strcmp(fig.UserData.annotation.Value, 'legend') == 1
@@ -284,11 +293,15 @@ function update (ax, fig)
         set(ax, 'Visible', 'off');
     else
         set(ax, 'Visible', 'on');
-    end          
+    end
+    
 end
 
 %% process spectrum
-function processed_spectra = process_spectra (input_spectra, smoothingPts)
+function processed_spectra = process_spectra (fig)
+
+    input_spectra = fig.UserData.spectra;
+    smoothingPts = fig.UserData.smoothingPts.Value;
 
     processed_spectra = input_spectra; % << initialize by copying
     for s = 1:numel(input_spectra)
@@ -310,7 +323,7 @@ function processed_spectra = process_spectra (input_spectra, smoothingPts)
 
 
         absorption_spectra(s).ampl = cumtrapz(processed_spectra(s).ampl);
-
+        
         %get the index of the max value of the integrated spectrum, and use it to get
         %the field where the value is max.
         [~, ndx] = max(absorption_spectra(s).ampl);
@@ -319,17 +332,25 @@ function processed_spectra = process_spectra (input_spectra, smoothingPts)
         peakHeight(s) = max(processed_spectra(s).ampl) - min(processed_spectra(s).ampl);
         centerfield(s) = processed_spectra(s).field(ndx);
     end
+    
 
     scalingfactor = max(peakHeight);
     allignmentpoint = mean(centerfield);
 
-    for s =1:numel(input_spectra)
-        processed_spectra(s).field = input_spectra(s).field - ...
-            (centerfield(s) - allignmentpoint);
-        processed_spectra(s).ampl = processed_spectra(s).ampl ...
-            * scalingfactor / peakHeight(s);
+    % if the toggle is off don't normalize each spectrum to max height
+    if fig.UserData.norm.Value == true
+        for s =1:numel(input_spectra)
+            processed_spectra(s).field = input_spectra(s).field - ...
+                (centerfield(s) - allignmentpoint);
+            processed_spectra(s).ampl = processed_spectra(s).ampl ...
+                * scalingfactor / peakHeight(s);
+        end
+    else
+        for s =1:numel(input_spectra)
+            processed_spectra(s).field = input_spectra(s).field - ...
+                (centerfield(s) - allignmentpoint);
+        end
     end
-
 
 end
 
@@ -366,6 +387,8 @@ function swap_spectra (ax, fig)
 end
 
 function select_spectra(fig, src)
+
+
     % find what is currently in the selected spectrum displayed for #1 and
     % #2 this is the necessary workarround snce we can't use dropdown menus
     % on linux
@@ -438,4 +461,9 @@ function select_spectra(fig, src)
             
         end
     end
-end    
+end
+
+%% wrapper function for update
+% whenever a cliuck is made in the plotting area get the cursor position,
+% then check if it corresponds to a graphics object, if it does, pass that
+% handle to update
