@@ -1403,7 +1403,7 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
             print(coordinates[radial_sn])
             radial_proj = coordinates[radial_sn].project_onto_normal_plane(
                 reference_vect)
-            print(f'if this isnt 0 in the z dimension something is wrong: {radial_proj}')
+            # print(f'if this isnt 0 in the z dimension something is wrong: {radial_proj}')
             assert not np.allclose(radial_proj, vector([0,0,0]))
             if radial_proj.is_nonzero():
                 if radial_angle is not None:
@@ -1411,12 +1411,12 @@ def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
                     b = -coordinates[radial_sn]
                     x_prime = b.project_onto_normal_plane(reference_vect)
                     curr_rad_ang = radial_proj.angle_between(x_prime)
-                    print(f'ffs, this better be pi: {curr_rad_ang}')
+                    # print(f'ffs, this better be pi: {curr_rad_ang}')
                     turn_by = radial_angle - curr_rad_ang
-                    print(f'were turning around the helix being orienteds internal axis by {turn_by}')
+                    # print(f'were turning around the helix being orienteds internal axis by {turn_by}')
                     if not np.isclose(turn_by, 0):
-                        print(f'the radial projection: {radial_proj}')
-                        print(f' from orient the ref v is {reference_vect}')
+                        # print(f'the radial projection: {radial_proj}')
+                        # print(f' from orient the ref v is {reference_vect}')
 
                         # if a radial angle was given rotate the selected points
                         # arround their long axis, which is now alligned
@@ -1770,51 +1770,28 @@ def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
     points = [coordinates[sn] for sn in select(info_table,
                                                atom_name=c['atom_name'],
                                                res_num=c['res_num'])]
-    points = np.asarray(points).copy()
-    # print(f'the reference points across all monomers of the reference structure:\n{points}')
     center = sum(points)/len(points)
     # print(f'the center is at {center}')
-    ref_point = coordinates[center_sn].copy()
-    # print(f'the reference point for chain A is {ref_point}')
-    coordinates = vector(coordinates)
+    ref_point = vector(coordinates[center_sn])
 
-    points_to_center = center - ref_point
-    # print(f'this should point to the center, and shouldnt be a zero vector except for monomer input:\n{points_to_center}')
+    points_to_center = vector(center - ref_point)
 
-    # if you are dealing with only a monomer then there is no radius or radial angle
-    try:
-        radius = points_to_center.get_length()
-
-        coordinates -= ref_point
-        rad_vect = coordinates[radial_sn].project_onto_normal_plane(z_ax).copy()
-        # print(f'the radial vector is {rad_vect}')
-
-        radial_angle = points_to_center.angle_between(rad_vect)
-        # print(f'the radial angle is {radial_angle}')
-    except:
-        radius = None
-        radial_angle = None
-        # print('No radius or radial angle assigned for orientation of a monomer as a reference')
-
-
-    axis = coordinates[axis_sn].copy()
-
+    axis = (coordinates[axis_sn] - ref_point).copy()
     cross_prod = vector(np.cross(axis, z_ax))
     axial_offset_ang = axis.angle_between(z_ax)
-    # print(f'the axial angle is {axial_offset_ang}')
+
+    radial_axis = vector(coordinates[radial_sn] - ref_point)
+    radial_axis = radial_axis.project_onto_normal_plane(axis).copy()
+
+    # if you are dealing with a monomer, points to center is 0
+    # radius is None and radial angle is measured relative to x axis projected
+    # normal to the principle axis
+    if not np.allclose(points_to_center, vector([0,0,0])):
+        radius = points_to_center.get_length()
+        radial_angle = points_to_center.angle_between(radial_axis)
+    else:
+        radius = None
+        x_prime = x_ax.project_onto_normal_plane(axis)
+        radial_angle = x_prime.angle_between(radial_axis)
+
     return radius, radial_angle, cross_prod, axial_offset_ang
-
-def ramachandran(coordinates, info_table):
-
-    # !!! currently not working will fix later
-    get_phi_psi(coordinates, info_table)
-    alpha_carbons = select(info_table, atom_name='CA')
-    phis = []
-    psis = []
-    res_nums = []
-    for n, res in enumerate(alpha_carbons):
-        phis.append(info_table[res]['phi'])
-        psis.append(info_table[res]['psi'])
-        res_nums.append(info_table[res]['res_num'])
-    print(phis)
-    return mpl.pyplot.scatter(phis, psis)

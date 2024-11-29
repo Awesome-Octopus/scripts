@@ -54,9 +54,25 @@ class vector (np.ndarray):
             if (c + 1) < tolerance:
                 # Vectors are nearly anti-parallel, return pi
                 return np.pi
+            elif abs(c - 1) < tolerance:
+                return 0.0
+
             else:
                 # Compute the angle using arccos
-                return np.arccos(c)
+                ang = np.arccos(c)
+
+                # to distinguish positive rotation from negative rotation
+                # you need to test and see if rotation by that angle arround
+                # the cross product produces the other vector
+                cp = np.cross(a,b)
+                if cp[2] < 0:
+                    ang = -ang
+                elif np.allclose(cp[2], 0.0):
+                    test = b.rotate_arround(-ang, a)
+                    if not np.allclose(a, test):
+                        ang = -ang
+                return ang
+
         except ZeroDivisionError as err:
             print(
                 'Error in vector.angle_between(): Attempt to take an angle '
@@ -127,6 +143,7 @@ class vector (np.ndarray):
         # component of the first vector which is orthogonal to the second, in
         # other words, if the second vector defined the normal of a plane, give
         # the shadow of the first vector projected onto that plane
-        a = self.dot(other_vector.unitize())
-        shadow = self - a*other_vector
+        norm_other = other_vector.unitize()
+        a = self.dot(norm_other)
+        shadow = self - a*norm_other
         return shadow

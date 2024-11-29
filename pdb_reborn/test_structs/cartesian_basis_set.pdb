@@ -1,9 +1,0 @@
-ATOM      1  N1  UNK     1      -0.000   0.000  -0.000  1.00  0.00           N
-TER       2      UNK h   1
-HETATM    3 He1  UNK     2       1.000   0.000   0.000  1.00  0.00          He
-TER       4      UNK h   2
-ATOM      5  O1  UNK     3       0.000  -0.000   1.000  1.00  0.00           O
-TER       6      UNK h   3
-ATOM      7  P1  UNK     4       0.000   1.000  -0.000  1.00  0.00           P
-TER       8      UNK h   4
-END
