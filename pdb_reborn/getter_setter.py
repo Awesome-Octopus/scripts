@@ -13,7 +13,7 @@ import copy
 import itertools
 import numpy as np
 import math
-from io_funcs import import_pdb
+from io_funcs import import_pdb, plot_model
 from coord_funcs import cart2cylind, convert_angle
 from vector_class import vector
 
@@ -1246,214 +1246,163 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                 pass
     return coordinates, info_table
 
+def get_transform_mat(source_coords, target_coords, source_center_sn, source_axis_sn, source_radial_sn, **kwargs):
 
-def orient(coordinates, info_table, center_sn, axis_sn, radial_sn=None,
-           radial_angle=None, reference_vect=None, **kwargs):
     """
-    Given a serial number for a central atom and a serial number for an atom
-    to define a long axis, orient everything on that chain so that the vector
-    from the center atom to the axis atom alligns with the reference vector.
+    Compute the 4x4 homogeneous transformation matrix that aligns the source coordinates to the target coordinates.
 
-    Parameters
+    The transformation matrix will rotate and translate the source points to match the target points.
+    By default, both rotation and translation are applied. If only rotation is required, set the `translate` keyword argument to `False`.
+
+    Parameters:
     ----------
-    coordinates : numpy ndarray of vectors
-        the atomic coordinates of all atoms.
-    info_table : list
-        list of dictionaries containing data for each coordinate.
+    source_coords : numpy.ndarray
+        The coordinates of the source object as a 2D array (n x 3).
+
     center_sn : int
-        serial number of the atom which is to be centered at [0 0 0].
+        The index of the center point in the source coordinates.
+
     axis_sn : int
-        serial number of the atom which will define the new + z axis relative
-        to the center atom.
-    radial_sn : int, optional
-        serial number of the atom whose projection onto the normal plane of
-        the desired z-axis will form a reference vector for rotation about the
-        internal longitudinal axis. The default is None.
-    radial_angle : float, optional
-        if given, the angle about the z axis by which the radial reference
-        vector should be rotated. The default is None.
-    reference_vect : vector, optional
-        If, given, an r3 vector to which the longitudinal axis should be
-        alliged instead of the +z axis. The default is None.
-....**kwargs : the only option for now is 'recenter' : (True | False) that
-        determines whether center_sn should be at [0, 0, 0] in the returned
-        structure (True) or if the centering done for the rotations should be
-        undone to return it to its original position (after rotation) (False).
-        Default is False.
+        The index of the axis point in the source coordinates.
 
-    Returns
+    radial_sn : int
+        The index of the radial point in the source coordinates.
+
+    target_coords : numpy.ndarray
+        The coordinates of the target object as a 2D array (n x 3).
+
+    **kwargs : dict, optional
+        A dictionary of keyword arguments:
+        - `translate` (bool): If `True`, both rotation and translation are applied (default behavior).
+        - If `False`, only rotation is applied, and the translation is ignored.
+
+        - `target_center_sn` (int): If given, the index for the atom to be used as
+            center coordinate, otherwise assigned the same as source_center_sn
+
+        - `target_radial_sn' (int): If given, the index for the atom to be used as
+            the radial axis coordinate, otherwise assigned the same as source_radial_sn
+
+        - `target_axis_sn' (int): If given, the index for the atom to be used as
+            the principle axis coordinate, otherwise assigned the same as source_axis_sn
+
+            NOTE: either all three target coordinates keywords must be supplied, or none.
+            incomplete set of coordinates raises an error
+
+    Returns:
     -------
-    coordinates : numpy ndarray of vectors.
-        coordinates with orientation transformation applied
+    transformation_matrix : numpy.ndarray
+        A 4x4 homogeneous transformation matrix that aligns the source coordinates to the target coordinates.
+        The matrix includes both rotation and, if requested, translation.
 
-    points_to_center : vector
-        if radial_sn was given this is the vector that points along the radial
-        axis. else None is returned.
-
+    Raises:
+    ------
+    ValueError
+        If the number of arguments in `args` is not exactly 3 or if the input data is invalid.
     """
 
-    # if not specified do not recenter the final coordinates on center_sn
-    recenter = kwargs.get('recenter', False)
-    if not all(type(x) == int for x in (axis_sn, center_sn, radial_sn)):
-        raise ValueError('axis_sn, center_sn, and radial_sn must each be a'
-                         'single integer and a valid coordinate serial number')
+    translate = kwargs.get('translate', True)
+    target_radial_sn = kwargs.get('target_radial_sn', None)
+    target_center_sn = kwargs.get('target_center_sn', None)
+    target_axis_sn = kwargs.get('target_axis_sn', None)
 
-    x_ax = vector([1, 0, 0])
-    y_ax = vector([0, 1, 0])
-    z_ax = vector([0, 0, 1])
+    v = [tf is None for tf in (target_axis_sn, target_center_sn, target_radial_sn)]
+    if all(v):
+        target_radial_sn = source_radial_sn
+        target_center_sn = source_center_sn
+        target_axis_sn = source_axis_sn
+    elif any (v) and not all(v):
+        raise ValueError ('missing one or more indices to define the target axis, if none are given the same set from the source structure is used by default')
 
-    # check for correct input
-    if radial_sn is not None:
-        ref_points = [info_table[center_sn], info_table[axis_sn],
-                      info_table[radial_sn]]
-    else:
-        ref_points = [info_table[center_sn], info_table[axis_sn]]
-
-    # make sure the reference points all come from the same model, submodel,
-    # and chain
-    ch = ref_points[0]['chain']
-    a = all(x['chain'] == ch for x in ref_points)
-    mod = ref_points[0]['model_name']
-    b = all(x['model_name'] == mod for x in ref_points)
-    sub = ref_points[0]['submodel']
-    c = all(x['submodel'] == sub for x in ref_points)
-    if not a or not b or not c:
-        raise ValueError('All coordinate points for orientation must be from'
-                         'the same chain, model, and submodel')
-
+    if translate == False:
+        translation_vect = np.asarray([0, 0, 0]).T
+        # if translation to superimpose the two structures is not desired
+        # change the last column to zeros except the last element
+        # [[ .  .  .  0 ]
+        #  [ .  .  .  0 ]
+        #  [ .  .  .  0 ]
+        #  [ 0  0  0  1 ]]
     else:
 
-        ser_nums = select(info_table, chain=ch, model_name=mod, submodel=sub)
-        # the atom to be made [0,0,0]
-        center = coordinates[center_sn].copy()
-        for sn in ser_nums:
-            coordinates[sn] -= center
+        # translation vect is the difference vector between their center_atoms
+        # as a column vector
+        translation_vect = source_coords[source_center_sn].copy().reshape(-1,1) \
+            - target_coords[target_center_sn].reshape(-1,1)
 
-        # atom to be set to [0,0,z]
-        axis_vector = coordinates[axis_sn].copy()
-        if np.array_equal(center, axis_vector):
-            raise ValueError('axis vector and center vector can not be the'
-                             ' same')
-        # plot_model(coordinates, None, 'after_centering')
-        # find angle between desired axis and yz plane
+    # define internals for the source structure ----------------
 
-        xy = axis_vector.project_onto_normal_plane(z_ax)
-        crossp = vector(np.cross(xy, y_ax))
-        if not xy.is_nonzero():
-            yz_ang = 0
+    # the priciple axis that defines "up"
+    source_principle_axis = vector(source_coords[source_axis_sn] -
+                                   source_coords[source_center_sn])
+    source_principle_axis = source_principle_axis.unitize()
+    source_principle_axis = np.squeeze(source_principle_axis)
+    # print(principle_axis, principle_axis.shape)
 
-        else:
-            yz_ang = y_ax.angle_between(xy)
+    source_radial_axis = vector(source_coords[source_radial_sn] -
+                                source_coords[source_center_sn])
+    source_radial_axis = np.squeeze(source_radial_axis)
+    source_radial_axis = source_radial_axis.project_onto_normal_plane(source_principle_axis)
+    source_radial_axis = source_radial_axis.unitize()
 
-        # if the Z component of the cross product is negative reverse direction
-        if crossp[2] < 0:
-            yz_ang = -yz_ang
+    source_norm_axis = vector(np.cross(source_principle_axis,
+                                       source_radial_axis))
 
-        # rotate everything around the z axis by that angle
-        for n in ser_nums:
-            if n != center_sn:
+    source_mat = np.vstack((source_principle_axis, source_radial_axis,
+                            source_norm_axis))
 
-                coordinates[n] = coordinates[n].rotate_arround(
-                    yz_ang, z_ax)
-
-        # our reference is now in the yz plane, find the angle to +z
-        yz = coordinates[axis_sn]
-        z_ang = z_ax.angle_between(yz)
-
-        # if the X component of the cross product is negative reverse direction
-        crossp = np.cross(yz, z_ax)
-        if crossp[0] < 0:
-            z_ang = -z_ang
-
-        for n in ser_nums:
-
-            if n != center_sn:
-                coordinates[n] = coordinates[n].rotate_arround(z_ang, x_ax)
-
-        # if you specified somnething other than the z axis to align
-        # the longitudinal axis along
-        if reference_vect is not None:
-
-            crossp = vector(np.cross(z_ax, reference_vect))
-
-            offset_ang = z_ax.angle_between(reference_vect)
-
-            if not np.allclose(crossp, vector([0, 0, 0])):
-                test = z_ax.rotate_arround(offset_ang, crossp)
-                if np.dot(test, reference_vect) < 0:
-                    offset_ang = -offset_ang
-                for n in ser_nums:
-                    coordinates[n] = coordinates[n].rotate_arround(offset_ang,
-                                                                   crossp)
-            # plot_model(coordinates, None, 'aligned to rot_ax')
-        else:
-
-            reference_vect = z_ax
-            crossp = vector([0, 0, 0])
-        # the radial projection vector will point to the center of
-        # the subunit assembly, when the subunit is rotated by the given
-        # angle arround an internal axis. If we want the vector from
-        # center atom and the vector to the center of subunit
-        # rotation to be e.g. +30 degrees, we specify pi/6 as the argument for
-        # radial angle
-
-        if radial_sn is not None and radial_sn != center_sn \
-                and radial_sn != axis_sn:
-
-            print(coordinates[radial_sn])
-            radial_proj = coordinates[radial_sn].project_onto_normal_plane(
-                reference_vect)
-            # print(f'if this isnt 0 in the z dimension something is wrong: {radial_proj}')
-            assert not np.allclose(radial_proj, vector([0,0,0]))
-            if radial_proj.is_nonzero():
-                if radial_angle is not None:
-
-                    b = -coordinates[radial_sn]
-                    x_prime = b.project_onto_normal_plane(reference_vect)
-                    curr_rad_ang = radial_proj.angle_between(x_prime)
-                    # print(f'ffs, this better be pi: {curr_rad_ang}')
-                    turn_by = radial_angle - curr_rad_ang
-                    # print(f'were turning around the helix being orienteds internal axis by {turn_by}')
-                    if not np.isclose(turn_by, 0):
-                        # print(f'the radial projection: {radial_proj}')
-                        # print(f' from orient the ref v is {reference_vect}')
-
-                        # if a radial angle was given rotate the selected points
-                        # arround their long axis, which is now alligned
-                        # to the reference axis, so that the radial vector
-                        # and points to center vector subtend the desired
-                        # radial angle
-                        for sn in ser_nums:
-                            coordinates[sn] = coordinates[sn].rotate_arround(
-                                turn_by, reference_vect)
-
-                        points_to_center = radial_proj.rotate_arround(
-                            turn_by, reference_vect).copy()
-                        points_to_center = points_to_center.unitize()
+    print('\nsource_mat\n', source_mat, source_mat.shape)
 
 
-                    else:
-                        points_to_center = radial_proj.unitize()
-                else:
-                    points_to_center = None
-            else:
-                raise ValueError('the radial vector has no component vector'
-                                 'orthogonal to the axial vector')
-        else:
-            points_to_center = None
-        # plot_model(coordinates, None,
-        #            'after rotation arround internal longitudinal axis')
-        if not recenter:
+    # define internals for the target structure ----------------
 
-            coordinates += center
+    target_principle_axis = vector(target_coords[target_axis_sn] -
+                                   target_coords[target_center_sn])
+    target_principle_axis = target_principle_axis.unitize()
+    target_principle_axis = np.squeeze(target_principle_axis)
 
-    print(f' from orient points to center is {points_to_center}')
-    return coordinates, points_to_center
+    target_radial_axis = vector(target_coords[target_radial_sn] -
+                                target_coords[target_center_sn])
+    target_radial_axis = np.squeeze(target_radial_axis)
+    target_radial_axis = target_radial_axis.project_onto_normal_plane(target_principle_axis)
+    target_radial_axis = target_radial_axis.unitize()
+
+    target_norm_axis = vector(np.cross(target_principle_axis,
+                                       target_radial_axis))
+    target_mat = np.vstack((target_principle_axis, target_radial_axis,
+                            target_norm_axis))
+
+    print('ntarget_mat\n', target_mat, target_mat.shape)
+
+    rot_mat = target_mat @ source_mat.T
+    print('\nrotation matrix\n', rot_mat, rot_mat.shape)
+    aug_rot_mat = np.hstack((rot_mat, translation_vect))
+    print('\naugmented rotation matrix\n', aug_rot_mat, aug_rot_mat.shape)
+
+    B = np.asarray([0, 0, 0, 1])
+    # print('\nB\n', B, B.shape)
+    # print(transformation_matrix, transformation_matrix.shape)
+    transformation_matrix = np.vstack((aug_rot_mat, B))
+
+    return transformation_matrix
+
+def orient(coordinates, target_coords, center_sn, axis_sn, radial_sn,
+           **kwargs):
+
+    # pass along kwargs received directly. to generate transformation matrix according
+    # to kwargs passed to this function.
+    transformation_matrix = get_transform_mat(coordinates, target_coords, center_sn, axis_sn, radial_sn, **kwargs)
+
+    # pad on extra 1s for homogeneous coordinates
+    padding = np.ones((len(coordinates), 1), dtype=float)
+    padded_coordinates = np.hstack((coordinates, padding))
+
+    transformed_coordinates = padded_coordinates@transformation_matrix
+    transformed_coordinates = transformed_coordinates[:, :3]
+
+    return transformed_coordinates
 
 
 def helix_vector(coordinates, info_table, nterm_res, cterm_res):
     '''
-
     Parameters
     ----------
     nterm_res : int
@@ -1478,7 +1427,6 @@ def helix_vector(coordinates, info_table, nterm_res, cterm_res):
     c_alpha_coords = np.zeros(shape=(n_atoms, 3))
     for n, s in enumerate(c_alpha_ser_nums):
         c_alpha_coords[n] = coordinates[s]
-
     # find the mean of the position vectors of the CAs and recenter
     # them on this
     mean_coord = np.mean(c_alpha_coords, axis=0).view(np.ndarray)
@@ -1741,57 +1689,31 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                          "'definitive' or 'heuristic'")
     return coordinates, info_table
 
+def ref_point_input_check (coordinates, info_table, *ser_nums, **kwargs):
 
-def get_struct_orientation(fname, center_sn, axis_sn, radial_sn):
+    check_chain = kwargs.get('check_chain', True)
+    check_model = kwargs.get('check_model', True)
+    check_submodel = kwargs.get('check_submodel', True)
 
-    # !!! NOTE !!!!! this is not intended as a general use funtion yet
-    # only useful for the pdb 7k3g substructure 1
-    # The following will perfectly allign a single helix to mei hong's model
-    # so that multimerized versions will overlay exactly in the TMD region
+    # get chain for the inputs, raise a warning if points aren't unique and
+    # on the same chain
+    if check_chain:
+        chains = [info_table[sn]['chain'] for sn in ser_nums]
+        if not all( ch == chains[0] for ch in chains):
+            raise ValueError('The supplied reference points for basis coordinates'
+                             'are not from the same chain. If this is okay, '
+                             'pass the check_chain=False kwarg')
+    if check_model:
+        models = [info_table[sn]['model'] for sn in ser_nums]
+        if not all( m == models[0] for m in models):
+            raise ValueError('The supplied reference points for basis coordinates'
+                             'are not from the same model. If this is okay, '
+                             'pass the check_model=False kwarg')
+    if check_submodel:
+        subs = [info_table[sn]['submodel'] for sn in ser_nums]
+        if not all( s == subs[0] for s in subs):
+            raise ValueError('The supplied reference points for basis coordinates'
+                             'are not from the same submodel. If this is okay, '
+                             'pass the check_submodel=False kwarg')
 
-    assert isinstance(fname, str), 'invalid filename'
-    assert all(isinstance(x, int) for x in \
-            [center_sn, radial_sn, axis_sn]), \
-            'serial numbers must be a single integers'
-
-    coordinates, info_table = import_pdb(fname)
-
-    #print(center_sn, axis_sn, radial_sn)
-
-    x_ax = vector([1, 0, 0])
-    y_ax = vector([0, 1, 0])
-    z_ax = vector([0, 0, 1])
-
-
-    # get all the center reference points across all monomers
-    c = select(info_table, ser_num=center_sn)[0]
-    c = info_table[c]
-
-    points = [coordinates[sn] for sn in select(info_table,
-                                               atom_name=c['atom_name'],
-                                               res_num=c['res_num'])]
-    center = sum(points)/len(points)
-    # print(f'the center is at {center}')
-    ref_point = vector(coordinates[center_sn])
-
-    points_to_center = vector(center - ref_point)
-
-    axis = (coordinates[axis_sn] - ref_point).copy()
-    cross_prod = vector(np.cross(axis, z_ax))
-    axial_offset_ang = axis.angle_between(z_ax)
-
-    radial_axis = vector(coordinates[radial_sn] - ref_point)
-    radial_axis = radial_axis.project_onto_normal_plane(axis).copy()
-
-    # if you are dealing with a monomer, points to center is 0
-    # radius is None and radial angle is measured relative to x axis projected
-    # normal to the principle axis
-    if not np.allclose(points_to_center, vector([0,0,0])):
-        radius = points_to_center.get_length()
-        radial_angle = points_to_center.angle_between(radial_axis)
-    else:
-        radius = None
-        x_prime = x_ax.project_onto_normal_plane(axis)
-        radial_angle = x_prime.angle_between(radial_axis)
-
-    return radius, radial_angle, cross_prod, axial_offset_ang
+    return True

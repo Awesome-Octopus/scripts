@@ -25,9 +25,8 @@ multiplicity = len(set(d['chain'] for d in info_table))
 radius, radial_angle, cross_prod, axial_offset_ang = get_struct_orientation('test_structs/poly_gly_aligned_helix.pdb', center_sn, axis_sn, radial_sn)
 axis = vector([0,0,1]).rotate_arround(-axial_offset_ang, cross_prod)
 print(axis)
-coordinates, info_table = import_pdb('test_structs/poly_gly_tilted_helix.pdb')
-
+# coordinates, info_table = import_pdb('test_structs/poly_gly_tilted_helix.pdb')
 
 coordinates, points_to_center = orient(coordinates, info_table, center_sn, axis_sn, radial_sn, radial_angle=radial_angle, reference_vect=axis)
 
-write_pdb(coordinates, info_table, 'test_structs/test')
+# write_pdb(coordinates, info_table, 'test_structs/test')

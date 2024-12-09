@@ -6,6 +6,7 @@ Created on Thu Oct  3 00:38:41 2024
 @author: andrew
 """
 import numpy as np
+from scipy.spatial import ConvexHull
 
 class vector (np.ndarray):
     def __new__(cls, vect):
@@ -147,3 +148,11 @@ class vector (np.ndarray):
         a = self.dot(norm_other)
         shadow = self - a*norm_other
         return shadow
+
+    def is_colinear(self, *other_vectors):
+        if len(other_vectors < 2):
+            return True
+        else:
+            s = [self, *other_vectors]
+            hull = ConvexHull(s)
+            return len(hull.vertices) == 2
