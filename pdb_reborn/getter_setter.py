@@ -1246,7 +1246,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                 pass
     return coordinates, info_table
 
-def get_transform_mat(source_coords, target_coords, source_center_sn, source_axis_sn, source_radial_sn, **kwargs):
+def get_transform_mat(source_coords, target_coords, source_center_sn, 
+                      source_axis_sn, source_radial_sn, **kwargs):
 
     """
     Compute the 4x4 homogeneous transformation matrix that aligns the source coordinates to the target coordinates.
@@ -1327,15 +1328,19 @@ def get_transform_mat(source_coords, target_coords, source_center_sn, source_axi
         # as a column vector
         translation_vect = source_coords[source_center_sn].copy().reshape(-1,1) \
             - target_coords[target_center_sn].reshape(-1,1)
-
+    print(translation_vect)
     # define internals for the source structure ----------------
-
+    print(source_axis_sn, source_center_sn, source_radial_sn, target_axis_sn, target_center_sn, target_radial_sn)
     # the priciple axis that defines "up"
+    print(source_coords[source_axis_sn], source_coords[source_center_sn], 
+          source_coords[source_radial_sn])
+    print(target_coords[target_axis_sn], target_coords[target_center_sn], 
+          target_coords[target_radial_sn])
     source_principle_axis = vector(source_coords[source_axis_sn] -
                                    source_coords[source_center_sn])
     source_principle_axis = source_principle_axis.unitize()
     source_principle_axis = np.squeeze(source_principle_axis)
-    # print(principle_axis, principle_axis.shape)
+    print(f'source principle {source_principle_axis}')
 
     source_radial_axis = vector(source_coords[source_radial_sn] -
                                 source_coords[source_center_sn])
@@ -1349,7 +1354,7 @@ def get_transform_mat(source_coords, target_coords, source_center_sn, source_axi
     source_mat = np.vstack((source_principle_axis, source_radial_axis,
                             source_norm_axis))
 
-    print('\nsource_mat\n', source_mat, source_mat.shape)
+    print('source_mat\n', source_mat, source_mat.shape)
 
 
     # define internals for the target structure ----------------
@@ -1358,6 +1363,7 @@ def get_transform_mat(source_coords, target_coords, source_center_sn, source_axi
                                    target_coords[target_center_sn])
     target_principle_axis = target_principle_axis.unitize()
     target_principle_axis = np.squeeze(target_principle_axis)
+    print(f'target principle {target_principle_axis}')
 
     target_radial_axis = vector(target_coords[target_radial_sn] -
                                 target_coords[target_center_sn])
@@ -1370,18 +1376,18 @@ def get_transform_mat(source_coords, target_coords, source_center_sn, source_axi
     target_mat = np.vstack((target_principle_axis, target_radial_axis,
                             target_norm_axis))
 
-    print('ntarget_mat\n', target_mat, target_mat.shape)
+    print('target_mat\n', target_mat, target_mat.shape)
 
     rot_mat = target_mat @ source_mat.T
-    print('\nrotation matrix\n', rot_mat, rot_mat.shape)
+    print('rotation matrix\n', rot_mat, rot_mat.shape)
     aug_rot_mat = np.hstack((rot_mat, translation_vect))
-    print('\naugmented rotation matrix\n', aug_rot_mat, aug_rot_mat.shape)
+    # print('\naugmented rotation matrix\n', aug_rot_mat, aug_rot_mat.shape)
 
     B = np.asarray([0, 0, 0, 1])
     # print('\nB\n', B, B.shape)
     # print(transformation_matrix, transformation_matrix.shape)
     transformation_matrix = np.vstack((aug_rot_mat, B))
-
+    # print(f'transformation matrix: {transformation_matrix}')
     return transformation_matrix
 
 def orient(coordinates, target_coords, center_sn, axis_sn, radial_sn,
@@ -1389,14 +1395,19 @@ def orient(coordinates, target_coords, center_sn, axis_sn, radial_sn,
 
     # pass along kwargs received directly. to generate transformation matrix according
     # to kwargs passed to this function.
-    transformation_matrix = get_transform_mat(coordinates, target_coords, center_sn, axis_sn, radial_sn, **kwargs)
+    transformation_matrix = get_transform_mat(coordinates, target_coords, 
+                                              center_sn, axis_sn, radial_sn, 
+                                              **kwargs)
 
     # pad on extra 1s for homogeneous coordinates
     padding = np.ones((len(coordinates), 1), dtype=float)
     padded_coordinates = np.hstack((coordinates, padding))
 
+    padded_coordinates = np.vstack((padded_coordinates, vector([0, 0, 0, 1])))
+    # print(f'size of coordinates {padded_coordinates.shape}')
+
     transformed_coordinates = padded_coordinates@transformation_matrix
-    transformed_coordinates = transformed_coordinates[:, :3]
+    transformed_coordinates = transformed_coordinates[:-1, :3]
 
     return transformed_coordinates
 

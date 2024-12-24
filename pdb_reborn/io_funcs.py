@@ -47,7 +47,6 @@ def import_pdb(fname=None):
 
                     info_table.append(a_dict)
                     n = n + 1
-    coordinates = np.zeros((3, 3))
     coordinates = np.zeros(shape=(n, 3))
     coordinates = coordinates.view(vector)
     n = 0
