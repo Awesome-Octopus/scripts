@@ -1246,11 +1246,44 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                 pass
     return coordinates, info_table
 
-def get_transform_mat(source_coords, target_coords, source_center_sn, 
+
+def get_basis(coords, center_sn, axis_sn, radial_sn):
+
+    if len({center_sn, axis_sn, radial_sn}) != 3:
+        raise ValueError('the same serial number was provided for multiple defining atoms when constructing a basis set. 3 unique points are required.')
+    
+    central_atom = coords[center_sn].copy()
+    principle_axis = vector(coords[axis_sn] - central_atom)
+    principle_axis = principle_axis.unitize()
+    principle_axis = np.squeeze(principle_axis)
+
+
+    radial_axis = vector(coords[radial_sn] - central_atom)
+    radial_axis = np.squeeze(radial_axis)
+    radial_axis = radial_axis.project_onto_normal_plane(principle_axis)
+    radial_axis = radial_axis.unitize()
+
+    norm_axis = vector(np.cross(principle_axis, radial_axis))
+
+    basis = np.vstack((principle_axis, radial_axis, norm_axis))
+    
+    # convert to 4x4 homogeneous coordinates
+    if np.linalg.det(basis) != 0:
+        #basis = np.hstack((basis,central_atom.reshape(-1,1)))
+        # basis = np.vstack((basis, np.array([[0, 0, 0, 1]])))
+        # print(f'basis dimensions {basis.shape}')
+     
+        return basis
+        
+    else:
+        raise ValueError('for the given set of coordinates and serial numbers defining center, axial, and radial axes, a valid basis cannot be formed')
+   
+
+def orient(source_coords, source_center_sn, 
                       source_axis_sn, source_radial_sn, **kwargs):
 
     """
-    Compute the 4x4 homogeneous transformation matrix that aligns the source coordinates to the target coordinates.
+    
 
     The transformation matrix will rotate and translate the source points to match the target points.
     By default, both rotation and translation are applied. If only rotation is required, set the `translate` keyword argument to `False`.
@@ -1260,40 +1293,55 @@ def get_transform_mat(source_coords, target_coords, source_center_sn,
     source_coords : numpy.ndarray
         The coordinates of the source object as a 2D array (n x 3).
 
-    center_sn : int
+    source_center_sn : int
         The index of the center point in the source coordinates.
 
-    axis_sn : int
+    source_axis_sn : int
         The index of the axis point in the source coordinates.
 
-    radial_sn : int
+    source_radial_sn : int
         The index of the radial point in the source coordinates.
 
-    target_coords : numpy.ndarray
-        The coordinates of the target object as a 2D array (n x 3).
+    
 
     **kwargs : dict, optional
         A dictionary of keyword arguments:
-        - `translate` (bool): If `True`, both rotation and translation are applied (default behavior).
+        - `translate`: If `True`, both rotation and translation are applied (default behavior).
         - If `False`, only rotation is applied, and the translation is ignored.
 
         - `target_center_sn` (int): If given, the index for the atom to be used as
             center coordinate, otherwise assigned the same as source_center_sn
 
-        - `target_radial_sn' (int): If given, the index for the atom to be used as
+        - `target_radial_sn` (int): If given, the index for the atom to be used as
             the radial axis coordinate, otherwise assigned the same as source_radial_sn
 
-        - `target_axis_sn' (int): If given, the index for the atom to be used as
+        - `target_axis_sn` (int): If given, the index for the atom to be used as
             the principle axis coordinate, otherwise assigned the same as source_axis_sn
+            
+        - `target_coords` : numpy.ndarray
+                The coordinates of the target object as a 2D array (n x 3).
+                
+        - `target_basis`: numpy.ndarray (4 x 4)
+                homogeneous coordinates.
+                3 orthogonal basis unit vectors, which the coordinate basis will
+                be changed onto if provided. given as 3 row vectors top to bottom:
+                principle_axis -> radial_axis -> normal_axis, with 4th column vector
+                for translation.
 
             NOTE: either all three target coordinates keywords must be supplied, or none.
-            incomplete set of coordinates raises an error
+            incomplete set of serial indices raises an error. If a target basis
+            is supplied, target_coords and target_xxx_sn must not be provided.
+            This will raise an error to prevent unintentional misuse.
 
     Returns:
     -------
-    transformation_matrix : numpy.ndarray
-        A 4x4 homogeneous transformation matrix that aligns the source coordinates to the target coordinates.
-        The matrix includes both rotation and, if requested, translation.
+    
+    rotated_translated_source_coords : numpy.ndarray
+        a 3 by x set of vectors of the input points after both operations are applied
+    
+    rotation_matrix : numpy.ndarray
+        A 3x3 matrix that aligns the source coordinates to the target coordinates.
+        DOES NOT INCLUDE TRANSLATION
 
     Raises:
     ------
@@ -1302,115 +1350,68 @@ def get_transform_mat(source_coords, target_coords, source_center_sn,
     """
 
     translate = kwargs.get('translate', True)
+    target_coords = kwargs.get('target_coords', None)
     target_radial_sn = kwargs.get('target_radial_sn', None)
     target_center_sn = kwargs.get('target_center_sn', None)
     target_axis_sn = kwargs.get('target_axis_sn', None)
+    target_basis = kwargs.get('target_basis', None)
 
+    # print(translate)
+    # check if the supplied basis set has nonzero determinant, and is correct shape
+    
     v = [tf is None for tf in (target_axis_sn, target_center_sn, target_radial_sn)]
-    if all(v):
-        target_radial_sn = source_radial_sn
-        target_center_sn = source_center_sn
-        target_axis_sn = source_axis_sn
-    elif any (v) and not all(v):
-        raise ValueError ('missing one or more indices to define the target axis, if none are given the same set from the source structure is used by default')
+    if target_coords is not None:
+        if target_basis is not None:
+            raise ValueError ('a target basis set was given as well as a target coordinates set. Provide only one or the other.')
+        
+        elif all(v):
+                target_radial_sn = source_radial_sn
+                target_center_sn = source_center_sn
+                target_axis_sn = source_axis_sn 
+                            
+        elif any (v):
+            raise ValueError ('missing one or more indices to define the target axis, or missing the target structure itself. If none are given the same set from the source structure is used by default')
+        
+        if translate == False:
+            translation_vect = source_coords[source_center_sn].copy()
+            # if translation to superimpose the two structures is not desired
+            # change the last column to zeros except the last element
 
-    if translate == False:
-        translation_vect = np.asarray([0, 0, 0]).T
-        # if translation to superimpose the two structures is not desired
-        # change the last column to zeros except the last element
-        # [[ .  .  .  0 ]
-        #  [ .  .  .  0 ]
-        #  [ .  .  .  0 ]
-        #  [ 0  0  0  1 ]]
-    else:
+        else:
+            # translation vect is the final position of the center atom
+            # in the target structure
+            translation_vect = target_coords[target_center_sn].copy()
+            # print(translation_vect)
+            
+           
+    elif target_basis is None:
+        raise ValueError('either a target_basis, or a target_coords must be supplied.')
+    
+    elif not all(v):
+        raise ValueError('one or more serial numbers were given to define a basis for the target coordinate set, but no coordinate set was supplied')
+    
+    elif translate == False:
+        translation_vect = source_coords[source_center_sn].copy()
+    
+    source_basis = get_basis(source_coords, source_center_sn, source_axis_sn, 
+                             source_radial_sn)
+    # print('source basis set:\n', source_basis)
+    recentered_source_coords = source_coords - \
+        source_coords[source_center_sn].copy()
+    
+    if target_basis is None:
+        target_basis = get_basis(target_coords, target_center_sn, 
+                                 target_axis_sn, target_radial_sn)
+        # print(f'target basis:\n{target_basis}')
+    
+    rotation_matrix = source_basis.T @ target_basis
+    rotated_source_coords = recentered_source_coords @ rotation_matrix
+    
+    # print('rotation matrix\n', transformation_matrix, transformation_matrix.shape)
 
-        # translation vect is the difference vector between their center_atoms
-        # as a column vector
-        translation_vect = source_coords[source_center_sn].copy().reshape(-1,1) \
-            - target_coords[target_center_sn].reshape(-1,1)
-    print(translation_vect)
-    # define internals for the source structure ----------------
-    print(source_axis_sn, source_center_sn, source_radial_sn, target_axis_sn, target_center_sn, target_radial_sn)
-    # the priciple axis that defines "up"
-    print(source_coords[source_axis_sn], source_coords[source_center_sn], 
-          source_coords[source_radial_sn])
-    print(target_coords[target_axis_sn], target_coords[target_center_sn], 
-          target_coords[target_radial_sn])
-    source_principle_axis = vector(source_coords[source_axis_sn] -
-                                   source_coords[source_center_sn])
-    source_principle_axis = source_principle_axis.unitize()
-    source_principle_axis = np.squeeze(source_principle_axis)
-    print(f'source principle {source_principle_axis}')
-
-    source_radial_axis = vector(source_coords[source_radial_sn] -
-                                source_coords[source_center_sn])
-    source_radial_axis = np.squeeze(source_radial_axis)
-    source_radial_axis = source_radial_axis.project_onto_normal_plane(source_principle_axis)
-    source_radial_axis = source_radial_axis.unitize()
-
-    source_norm_axis = vector(np.cross(source_principle_axis,
-                                       source_radial_axis))
-
-    source_mat = np.vstack((source_principle_axis, source_radial_axis,
-                            source_norm_axis))
-
-    print('source_mat\n', source_mat, source_mat.shape)
-
-
-    # define internals for the target structure ----------------
-
-    target_principle_axis = vector(target_coords[target_axis_sn] -
-                                   target_coords[target_center_sn])
-    target_principle_axis = target_principle_axis.unitize()
-    target_principle_axis = np.squeeze(target_principle_axis)
-    print(f'target principle {target_principle_axis}')
-
-    target_radial_axis = vector(target_coords[target_radial_sn] -
-                                target_coords[target_center_sn])
-    target_radial_axis = np.squeeze(target_radial_axis)
-    target_radial_axis = target_radial_axis.project_onto_normal_plane(target_principle_axis)
-    target_radial_axis = target_radial_axis.unitize()
-
-    target_norm_axis = vector(np.cross(target_principle_axis,
-                                       target_radial_axis))
-    target_mat = np.vstack((target_principle_axis, target_radial_axis,
-                            target_norm_axis))
-
-    print('target_mat\n', target_mat, target_mat.shape)
-
-    rot_mat = target_mat @ source_mat.T
-    print('rotation matrix\n', rot_mat, rot_mat.shape)
-    aug_rot_mat = np.hstack((rot_mat, translation_vect))
-    # print('\naugmented rotation matrix\n', aug_rot_mat, aug_rot_mat.shape)
-
-    B = np.asarray([0, 0, 0, 1])
-    # print('\nB\n', B, B.shape)
-    # print(transformation_matrix, transformation_matrix.shape)
-    transformation_matrix = np.vstack((aug_rot_mat, B))
-    # print(f'transformation matrix: {transformation_matrix}')
-    return transformation_matrix
-
-def orient(coordinates, target_coords, center_sn, axis_sn, radial_sn,
-           **kwargs):
-
-    # pass along kwargs received directly. to generate transformation matrix according
-    # to kwargs passed to this function.
-    transformation_matrix = get_transform_mat(coordinates, target_coords, 
-                                              center_sn, axis_sn, radial_sn, 
-                                              **kwargs)
-
-    # pad on extra 1s for homogeneous coordinates
-    padding = np.ones((len(coordinates), 1), dtype=float)
-    padded_coordinates = np.hstack((coordinates, padding))
-
-    padded_coordinates = np.vstack((padded_coordinates, vector([0, 0, 0, 1])))
-    # print(f'size of coordinates {padded_coordinates.shape}')
-
-    transformed_coordinates = padded_coordinates@transformation_matrix
-    transformed_coordinates = transformed_coordinates[:-1, :3]
-
-    return transformed_coordinates
-
+    rotated_translated_source_coords = rotated_source_coords + translation_vect
+    
+    return rotated_translated_source_coords, rotation_matrix
 
 def helix_vector(coordinates, info_table, nterm_res, cterm_res):
     '''
