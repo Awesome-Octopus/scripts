@@ -1279,14 +1279,18 @@ def get_basis(coords, center_sn, axis_sn, radial_sn):
         raise ValueError('for the given set of coordinates and serial numbers defining center, axial, and radial axes, a valid basis cannot be formed')
    
 
-def orient(source_coords, source_center_sn, 
-                      source_axis_sn, source_radial_sn, **kwargs):
+def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn, 
+           **kwargs):
 
     """
     
-
-    The transformation matrix will rotate and translate the source points to match the target points.
-    By default, both rotation and translation are applied. If only rotation is required, set the `translate` keyword argument to `False`.
+    will transform the source coordinates onto a second structure based on the 
+    current basis formed by the atoms at the supplied indices. 
+    Alternatively, a 3x3 matrix of a target basis set can be provided, with an
+    optional translation vector.
+    By default, both rotation and translation are applied. 
+    If only rotation is required, set the `translate` keyword 
+    argument to `False`.
 
     Parameters:
     ----------
@@ -1356,7 +1360,7 @@ def orient(source_coords, source_center_sn,
     target_axis_sn = kwargs.get('target_axis_sn', None)
     target_basis = kwargs.get('target_basis', None)
 
-    # print(translate)
+    # print(*kwargs)
     # check if the supplied basis set has nonzero determinant, and is correct shape
     
     v = [tf is None for tf in (target_axis_sn, target_center_sn, target_radial_sn)]
@@ -1377,12 +1381,13 @@ def orient(source_coords, source_center_sn,
             # if translation to superimpose the two structures is not desired
             # change the last column to zeros except the last element
 
-        else:
+        elif target_center_sn is not None:
             # translation vect is the final position of the center atom
             # in the target structure
             translation_vect = target_coords[target_center_sn].copy()
             # print(translation_vect)
-            
+        else:
+            translation_vect = vector([0, 0, 0])
            
     elif target_basis is None:
         raise ValueError('either a target_basis, or a target_coords must be supplied.')
@@ -1390,21 +1395,30 @@ def orient(source_coords, source_center_sn,
     elif not all(v):
         raise ValueError('one or more serial numbers were given to define a basis for the target coordinate set, but no coordinate set was supplied')
     
-    elif translate == False:
+    elif type(translate) == bool and translate == False:
         translation_vect = source_coords[source_center_sn].copy()
     
+    
+    elif type(translate) == vector and (translate.shape == (1,3) or translate.shape == (3,)):
+        translation_vect = translate
+        
+    else:
+        
+        raise ValueError('if a target basis is provided, and translation is desired, a 1x3 vector must be provided, else provide translate=False')
+        
     source_basis = get_basis(source_coords, source_center_sn, source_axis_sn, 
                              source_radial_sn)
-    # print('source basis set:\n', source_basis)
+    # print('source basis set:\n', source_basis, type(source_basis))
     recentered_source_coords = source_coords - \
         source_coords[source_center_sn].copy()
     
     if target_basis is None:
         target_basis = get_basis(target_coords, target_center_sn, 
                                  target_axis_sn, target_radial_sn)
-        # print(f'target basis:\n{target_basis}')
+        
     
     rotation_matrix = source_basis.T @ target_basis
+    # print(rotation_matrix)
     rotated_source_coords = recentered_source_coords @ rotation_matrix
     
     # print('rotation matrix\n', transformation_matrix, transformation_matrix.shape)
@@ -1507,7 +1521,9 @@ def clone_chain(coordinates, info_table, chain_list=None):
         coordinates = np.concatenate((coordinates, new_coords)).view(vector)
         info_table.extend(copy.deepcopy(
             info_table[mother_chain_sn[0]: mother_chain_sn[-1]+1]))
+        # print(daughter_chain_sn)
         for i, sn in enumerate(daughter_chain_sn):
+            # print(sn)
             info_table[sn]['ser_num'] = sn
             info_table[sn]['chain'] = new_chain
     return coordinates, info_table, new_chain_list
@@ -1555,9 +1571,9 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         threshold : float, optional
             the distance in angstroms below which a clash should be reported.
             propogated to the clash check functions. default is 0.36
-        radial_angle : float
-            the angle in radians between the vector from canter atom to
-            rotation center and the radial axis
+        target basis: np.ndarray
+            3x3 with row vectors (top to bottom) principle axis, radial axis, 
+            normal axis, which are an orthonormal basis for R3
 
         Returns
         -------
@@ -1569,28 +1585,28 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     n_slices = kwargs.get('n_slices', 20)
     n_rings = kwargs.get('n_rings', 20)
     cofr = kwargs.get('cofr', vector([0, 0, 0]))
-    radial_angle = kwargs.get('radial_angle', 0)
     rot_axis = kwargs.get('rot_axis', vector([0, 0, 1]))
     check_method = kwargs.get('check_method', 'definitive')
     threshold = kwargs.get('threshold', 0.36)
-
+    target_basis = kwargs.get('target_basis', np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0]]))
+    translate = kwargs.get('translate', False)
     try:
         rot_axis = rot_axis.unitize()
     except ZeroDivisionError:
         print('The axis of rotation can not be the zero vector')
 
     if multiplicity < 2 or type(multiplicity) is not int:
-        print('multiplicity for axial symmetry must be an integer 2 or'
-              ' greater')
-        raise ValueError
+        raise ValueError('multiplicity for axial symmetry must be an integer'
+                         ' 2 or greater')
 
     # first orient the chain specified by your reference vector points
 
-    coordinates, radial_axis = orient(coordinates, info_table, center_sn,
-                                      axis_sn, radial_sn, radial_angle, rot_axis, recenter=True)
+    coordinates, radial_axis = orient(coordinates, center_sn,
+                                      axis_sn, radial_sn, 
+                                      target_basis=target_basis, translate=translate)
 
     # the center of rotation is an eigenvector of the radial axis
-    symmetry_center = radial_axis*radius
+    symmetry_center = radial_axis[1,:]*radius
     # duplicate the chain, and keep a list of chains related by symmetry
 
     # call rot_sym_clash_check to ensure that the structure that we have for
@@ -1617,6 +1633,8 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
 
         tmp = coordinates.copy()
         tmp_table = info_table.copy()
+        
+        # print(info_table[0])
         clone_coords, clone_info, new_chain = clone_chain(tmp, tmp_table)
 
         # make a single copy, and apply 1 step of n fold symmetry, so that
@@ -1679,7 +1697,7 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
             #             angle, rot_axis)
             # plot_model(coordinates)
             #####################################
-            return None
+            return None, None
         else:
             try:
                 for x in range(0, (multiplicity - 1)):
