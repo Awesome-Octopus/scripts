@@ -1247,6 +1247,57 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     return coordinates, info_table
 
 
+def get_rot_mat(A, B):
+    
+    """
+    Computes the rotation matrix that transforms the basis A to the basis B.
+
+    This function assumes that the input bases A and B are provided as sets of 
+    row vectors, where each row represents a vector in the basis. The order of 
+    the input bases matters, as the function computes the transformation from 
+    basis A to basis B.
+
+    The resulting rotation matrix R satisfies the equation:
+        A * R = B
+    where A and B are the input bases, and R is the rotation matrix.
+
+    Args:
+        A (ndarray): An nxn numpy array representing the first basis, where each 
+                     row is a vector in the basis.
+        B (ndarray): An nxn numpy array representing the second basis, where each 
+                     row is a vector in the basis.
+
+    Returns:
+        ndarray: An nxn numpy array representing the rotation matrix that transforms 
+                 basis A to basis B.
+
+    Raises:
+        ValueError: If the input bases A and B do not have the same dimensions 
+                    or are not orthonormal.
+
+    Notes:
+        - The input matrices A and B must be orthonormal bases (i.e., their rows 
+          must be unit vectors and orthogonal to each other).
+        - The order of the input bases matters. Swapping A and B will give a 
+          different rotation matrix.
+    """
+    # Function implementation here
+
+    
+    # Check if the dimensions match
+    if A.shape != B.shape:
+        raise ValueError(f"Dimension mismatch: A has shape {A.shape}, B has shape {B.shape}.")
+    
+    # Check if the matrices are square (necessary for orthonormal bases)
+    if A.shape[0] != A.shape[1] or B.shape[0] != B.shape[1]:
+        raise ValueError("Both A and B must be square matrices for orthonormal bases.")
+    
+    # Compute the rotation matrix R = A * B^T
+    R = np.dot(A.T, B)
+    
+    return R
+
+
 def get_basis(coords, center_sn, axis_sn, radial_sn):
 
     if len({center_sn, axis_sn, radial_sn}) != 3:
@@ -1417,12 +1468,10 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
                                  target_axis_sn, target_radial_sn)
         
     
-    rotation_matrix = source_basis.T @ target_basis
-    # print(rotation_matrix)
+    rotation_matrix = get_rot_mat(source_basis, target_basis)
+
     rotated_source_coords = recentered_source_coords @ rotation_matrix
     
-    # print('rotation matrix\n', transformation_matrix, transformation_matrix.shape)
-
     rotated_translated_source_coords = rotated_source_coords + translation_vect
     
     return rotated_translated_source_coords, rotation_matrix
