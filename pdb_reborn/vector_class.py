@@ -6,7 +6,7 @@ Created on Thu Oct  3 00:38:41 2024
 @author: andrew
 """
 import numpy as np
-from scipy.spatial import ConvexHull
+#from scipy.spatial import ConvexHull
 
 class vector (np.ndarray):
     def __new__(cls, vect):

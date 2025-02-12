@@ -18,34 +18,40 @@ from getter_setter import orient, select, random_backbone, axial_symmetry, get_b
 center_res = 22
 axis_res = 10
 radial_res = 22
-radial_offset_angle = 0
+radial_offset_angle = np.pi/2
 tilt_offset_angle = 0
 lean_offset_angle = 0
+radius = 2.2
 offset_matrix = None
+chain = 'A'
 
-coordinates, info_table = import_pdb('5x29_S2E_completed.pdb')
-center_sn = select(info_table, res_num=center_res, chain='A', atom_name='CA')[0]
-# center_sn = 1
-axis_sn = select(info_table, res_num=axis_res, chain='A', atom_name='CA')[0]
-# axis_sn = 0
-radial_sn = select(info_table, res_num=radial_res, chain='A', atom_name='CB')[0]
-# radial_sn = 2 
+coordinates, info_table = import_pdb('5x29_S2E_rotated.pdb')
+center_sn = select(info_table, res_num=center_res, chain=chain, atom_name='CA')[0]
+axis_sn = select(info_table, res_num=axis_res, chain=chain, atom_name='CA')[0]
+radial_sn = select(info_table, res_num=radial_res, chain=chain, atom_name='C')[0]
+
 query_struct, query_table = import_pdb('5X29.pdb')
+query_center_sn = select(query_table, res_num=center_res, chain=chain, atom_name='CA')[0]
+query_axis_sn = select(query_table, res_num=axis_res, chain=chain, atom_name='CA')[0]
+query_radial_sn = select(query_table, res_num=radial_res, chain=chain, atom_name='C')[0]
+query_basis = get_basis(query_struct, query_center_sn, query_axis_sn, query_radial_sn)
 
 
 multiplicity = len(set(d['chain'] for d in query_table))
-# randomized_coords, info_table = random_backbone(coordinates, info_table, 1, '/home/andrew/scripts/pdb_reborn/residues.txt', 
-#                 center_sn=center_sn, radial_sn=radial_sn, axis_vector=axis_vect,
-#                 radial_v=radial_vect)axis_sn = select(info_table, res_num=10, chain='A', atom_name='CA')[0]
 
-basis = get_basis(query_struct, center_sn, axis_sn, radial_sn)
+
 # get the orientation of the overall multimer, arround which the monomers have 
 # radial symmetry
+print('the monomer basis inside the multimer was:\n', query_basis)
+initial_basis = get_basis(coordinates, center_sn, axis_sn, radial_sn)
+print('while our initial monomer was:\n', initial_basis)
 
 
+############### THE FOLLOWING CODE IS VERIFIED TO PRODUCE THE CORRECT GROUP AXIS
 center_pts = np.zeros((multiplicity,3))
 axis_pts = np.zeros((multiplicity,3))
 center_sns = select(query_table, res_num=center_res, atom_name='CA')
+# print(center_sns)
 axis_sns = select(query_table, res_num=axis_res, atom_name='CA')
 center_avg = vector([0,0,0])
 axis_avg = vector([0,0,0])
@@ -58,58 +64,47 @@ for n in range(multiplicity):
     axis_avg = axis_avg + query_struct[axis_sns[n]]
 group_axis = axis_avg/multiplicity - center_avg/multiplicity
 group_axis = group_axis.unitize()
+# we then use this to define a basis for the symmetry group
+# first a radial axis, which is the group center to the center atom of chain A
+group_rad_ax = (query_struct[center_sns[0]] - 
+                center_avg).project_onto_normal_plane(group_axis)
+# then the norm, which is the cross product
+group_norm_ax = vector(np.cross(group_axis, group_rad_ax))
+group_basis = np.vstack((group_axis, group_rad_ax, group_norm_ax)).T
+# print('the principle axis for the multimer group:\n', group_axis)
+##################################################################################
 
 
-target_center_sn = select(query_table, res_num=center_res, chain='A', atom_name='CA')
-translation_vector = query_struct[target_center_sn] - coordinates[center_sn]
+translation_vector = query_struct[query_center_sn] - coordinates[center_sn]
 
-# align your randomided struture to the quesry structure first
-coordinates, rot_mat = orient(coordinates, center_sn, axis_sn, radial_sn, 
-                                 target_basis=basis, translate=translation_vector)
+coordinates, radial_vect = orient(coordinates, center_sn, axis_sn, radial_sn, 
+                        target_basis=query_basis, translate=translation_vector)
+# write_pdb(coordinates, info_table, outfile='test_structs/intermediate_line_81')
 
-
-write_pdb(coordinates, info_table, 'test_structs/test')
 #if we wish to rotate each monomer arround its own long axis paralell to 
-# # the group symmetry axis
-# if radial_offset_angle != 0:
-#     offset_matrix = np.array([[1, 0, 0], [0, np.cos(radial_offset_angle), -np.sin(radial_offset_angle)],
-#                                [0, np.sin(radial_offset_angle), np.cos(radial_offset_angle)]])
-#     offset_matrix = offset_matrix.T
+# the group symmetry axis
 
-# # the same logic applies to the other 2 axes
-# if tilt_offset_angle != 0:
-#     tilt_rot_mat = np.array([[np.cos(tilt_offset_angle), 0, np.sin(tilt_offset_angle)],
-#                              [0, 1, 0],
-#                              [-np.sin(tilt_offset_angle), 0, np.cos(tilt_offset_angle)]])
-#     if offset_matrix is not None:
-#         offset_matrix = offset_matrix @ tilt_rot_mat.T
-#     else:
-#         offset_matrix = tilt_rot_mat.T
+#!!! change this to a matrix multiplication operation
+if radial_offset_angle !=0:
+    for ndx, row in enumerate(coordinates):
+        coordinates[ndx]  = vector(coordinates[ndx]).rotate_arround(
+            radial_offset_angle, vector(query_basis[0]))
 
-# if lean_offset_angle != 0:
-#     lean_rot_mat = np.array([[np.cos(lean_offset_angle), -np.sin(lean_offset_angle), 0],
-#                              [np.sin(tilt_offset_angle), np.cos(tilt_offset_angle), 0],
-#                              [0, 0, 1]])
-#     if offset_matrix is not None:
-#         offset_matrix = offset_matrix @ lean_rot_mat.T
-#     else:
-#         offset_matrix = lean_rot_mat.T
-
+# print('Offset Matrix:\n', offset_matrix)
 # if offset_matrix is not None:
-#     basis = basis @ offset_matrix
-    
-# pentamer_coords, info_table = axial_symmetry(coordinates, info_table, 5, 9, 
-#                                              center_sn, axis_sn, radial_sn, 
-#                                              translate=False, 
-#                                              rot_ax=group_axis,
-#                                              target_basis=basis, threshold=0.1)
+#     coordinates = coordinates @ offset_matrix.T
 
+pentamer_coords, info_table = axial_symmetry(coordinates, info_table, 
+                                             multiplicity, radius, 
+                                             center_sn, axis_sn, radial_sn, 
+                                             translate=translation_vector, 
+                                             target_basis=query_basis,
+                                             cofr=center_avg, rot_axis=group_axis,
+                                             threshold=0.36)
 
+if pentamer_coords is not None and info_table is not None:
 
-
-# if pentamer_coords is not None and info_table is not None:
-#     pass
-#     # write_pdb(pentamer_coords, info_table, 'test_structs/aligned')
-# else:
-#     print("the requested radius for multimerization is too small")
+    write_pdb(pentamer_coords, info_table, 'test_structs/aligned')
+else:
+    print("the requested radius for multimerization is too small")
     

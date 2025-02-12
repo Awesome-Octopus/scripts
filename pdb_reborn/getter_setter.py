@@ -1429,16 +1429,18 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
         
         if translate == False:
             translation_vect = source_coords[source_center_sn].copy()
-            # if translation to superimpose the two structures is not desired
-            # change the last column to zeros except the last element
 
-        elif target_center_sn is not None:
+
+        elif target_center_sn is not None and translate == True:
             # translation vect is the final position of the center atom
             # in the target structure
             translation_vect = target_coords[target_center_sn].copy()
-            # print(translation_vect)
+
+        elif type(translate) == vector and (translate.shape == (1,3) or
+                                            translate.shape == (3,)):
+            translation_vect = source_coords[source_center_sn].copy() + translate
         else:
-            translation_vect = vector([0, 0, 0])
+            raise ValueError('translate must be either boolean or a 1x3 vector')
            
     elif target_basis is None:
         raise ValueError('either a target_basis, or a target_coords must be supplied.')
@@ -1449,9 +1451,8 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
     elif type(translate) == bool and translate == False:
         translation_vect = source_coords[source_center_sn].copy()
     
-    
     elif type(translate) == vector and (translate.shape == (1,3) or translate.shape == (3,)):
-        translation_vect = translate
+        translation_vect = source_coords[source_center_sn].copy() + translate
         
     else:
         
@@ -1474,7 +1475,7 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
     
     rotated_translated_source_coords = rotated_source_coords + translation_vect
     
-    return rotated_translated_source_coords, rotation_matrix
+    return rotated_translated_source_coords, rotated_source_coords[1,:]
 
 def helix_vector(coordinates, info_table, nterm_res, cterm_res):
     '''
@@ -1652,10 +1653,11 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
 
     coordinates, radial_axis = orient(coordinates, center_sn,
                                       axis_sn, radial_sn, 
-                                      target_basis=target_basis, translate=translate)
+                                      target_basis=target_basis, 
+                                      translate=translate)
 
     # the center of rotation is an eigenvector of the radial axis
-    symmetry_center = radial_axis[1,:]*radius
+    symmetry_center = coordinates[center_sn] - radial_axis*radius
     # duplicate the chain, and keep a list of chains related by symmetry
 
     # call rot_sym_clash_check to ensure that the structure that we have for
@@ -1721,7 +1723,7 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                 for sn in current_chain:
                     coordinates[sn] -= symmetry_center
                     coordinates[sn] = coordinates[sn].rotate_arround(
-                        angle, rot_axis)
+                        angle, -rot_axis)
 
     elif check_method == 'definitive':
         if definitive_test():
