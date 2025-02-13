@@ -13,7 +13,7 @@ import copy
 import itertools
 import numpy as np
 import math
-from io_funcs import import_pdb, plot_model
+from io_funcs import import_pdb, plot_model, write_pdb
 from coord_funcs import cart2cylind, convert_angle
 from vector_class import vector
 
@@ -1328,9 +1328,13 @@ def get_basis(coords, center_sn, axis_sn, radial_sn):
         
     else:
         raise ValueError('for the given set of coordinates and serial numbers defining center, axial, and radial axes, a valid basis cannot be formed')
-   
 
-def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn, 
+#######################################################
+#!!! OFFSET PROBLEM DOES NOT COME FROM ORIENT
+
+#################################################################
+
+def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn, info_table,
            **kwargs):
 
     """
@@ -1404,7 +1408,7 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
         If the number of arguments in `args` is not exactly 3 or if the input data is invalid.
     """
 
-    translate = kwargs.get('translate', True)
+    translate = kwargs.get('translate', False)
     target_coords = kwargs.get('target_coords', None)
     target_radial_sn = kwargs.get('target_radial_sn', None)
     target_center_sn = kwargs.get('target_center_sn', None)
@@ -1428,8 +1432,8 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
             raise ValueError ('missing one or more indices to define the target axis, or missing the target structure itself. If none are given the same set from the source structure is used by default')
         
         if translate == False:
-            translation_vect = source_coords[source_center_sn].copy()
-
+            translation_vect = vector([0, 0, 0])
+            # write_pdb(source_coords, info_table, outfile='test_structs/line1432')
 
         elif target_center_sn is not None and translate == True:
             # translation vect is the final position of the center atom
@@ -1449,8 +1453,9 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
         raise ValueError('one or more serial numbers were given to define a basis for the target coordinate set, but no coordinate set was supplied')
     
     elif type(translate) == bool and translate == False:
-        translation_vect = source_coords[source_center_sn].copy()
-    
+        translation_vect = vector([0, 0, 0])
+        # write_pdb(source_coords, info_table, outfile='test_structs/line1453')
+
     elif type(translate) == vector and (translate.shape == (1,3) or translate.shape == (3,)):
         translation_vect = source_coords[source_center_sn].copy() + translate
         
@@ -1461,9 +1466,10 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
     source_basis = get_basis(source_coords, source_center_sn, source_axis_sn, 
                              source_radial_sn)
     # print('source basis set:\n', source_basis, type(source_basis))
-    recentered_source_coords = source_coords - \
-        source_coords[source_center_sn].copy()
-    
+    print(source_coords[source_center_sn])
+    # write_pdb(source_coords, info_table, outfile='test_structs/line1466')
+    recentered_source_coords = (source_coords - \
+        translation_vect)
     if target_basis is None:
         target_basis = get_basis(target_coords, target_center_sn, 
                                  target_axis_sn, target_radial_sn)
@@ -1472,10 +1478,10 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
     rotation_matrix = get_rot_mat(source_basis, target_basis)
 
     rotated_source_coords = recentered_source_coords @ rotation_matrix
-    
-    rotated_translated_source_coords = rotated_source_coords + translation_vect
-    
-    return rotated_translated_source_coords, rotated_source_coords[1,:]
+      
+    final_coords = rotated_source_coords + translation_vect
+
+    return final_coords, rotated_source_coords[1,:]
 
 def helix_vector(coordinates, info_table, nterm_res, cterm_res):
     '''
@@ -1638,7 +1644,8 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     rot_axis = kwargs.get('rot_axis', vector([0, 0, 1]))
     check_method = kwargs.get('check_method', 'definitive')
     threshold = kwargs.get('threshold', 0.36)
-    target_basis = kwargs.get('target_basis', np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0]]))
+    target_basis = kwargs.get('target_basis', np.array([[0, 0, 1], [1, 0, 0],
+                                                        [0, 1, 0]]))
     translate = kwargs.get('translate', False)
     try:
         rot_axis = rot_axis.unitize()
@@ -1649,15 +1656,22 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         raise ValueError('multiplicity for axial symmetry must be an integer'
                          ' 2 or greater')
 
+    # write_pdb(coordinates, info_table, outfile='test_structs/line1657')
+
     # first orient the chain specified by your reference vector points
 
-    coordinates, radial_axis = orient(coordinates, center_sn,
-                                      axis_sn, radial_sn, 
+
+    coordinates, radial = orient(coordinates, center_sn,
+                                      axis_sn, radial_sn, info_table,
                                       target_basis=target_basis, 
                                       translate=translate)
+    radial_axis = vector(coordinates[center_sn] - cofr).project_onto_normal_plane(rot_axis).unitize()
+    print(radial_axis.dot(rot_axis))
 
+
+    # write_pdb(coordinates, info_table, outfile='test_structs/intermediate_line_1659')
     # the center of rotation is an eigenvector of the radial axis
-    symmetry_center = coordinates[center_sn] - radial_axis*radius
+
     # duplicate the chain, and keep a list of chains related by symmetry
 
     # call rot_sym_clash_check to ensure that the structure that we have for
@@ -1676,36 +1690,36 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
     isolated_chain = coordinates[isolated_chain_ser_nums]
     # if they pass the rotational symmetry check you are good to apply copying
     # and rotation, otherwise return None
-
+    
     def definitive_test():
-        angle = 2*np.pi/multiplicity
-        # this copies the entire set of coordinates and info_table with the
-        # new chain added, but is simpler given how clone chain was implemented
+        # angle = 2*np.pi/multiplicity
+        # # this copies the entire set of coordinates and info_table with the
+        # # new chain added, but is simpler given how clone chain was implemented
 
-        tmp = coordinates.copy()
-        tmp_table = info_table.copy()
+        # tmp = coordinates.copy()
+        # tmp_table = info_table.copy()
         
-        # print(info_table[0])
-        clone_coords, clone_info, new_chain = clone_chain(tmp, tmp_table)
+        # # print(info_table[0])
+        # clone_coords, clone_info, new_chain = clone_chain(tmp, tmp_table)
 
-        # make a single copy, and apply 1 step of n fold symmetry, so that
-        # the new subunit is neighboring the old one. If these 2 subunits don't
-        # clash, the nature of rotational symmetry ensures that no other ones
-        # do either
-        clone_sns = select(clone_info, chain=new_chain)
+        # # make a single copy, and apply 1 step of n fold symmetry, so that
+        # # the new subunit is neighboring the old one. If these 2 subunits don't
+        # # clash, the nature of rotational symmetry ensures that no other ones
+        # # do either
+        # clone_sns = select(clone_info, chain=new_chain)
 
-        for sn in clone_sns:
-            clone_coords[sn] -= symmetry_center
-
-        # check every point in the start chain against every point in its
-        return is_clashing(clone_coords, [isolated_chain_ser_nums, clone_sns],
-                           threshold)
-
+        # # for sn in clone_sns:
+        # #     clone_coords[sn] -= symmetry_center
+        # # write_pdb(clone_coords, clone_info, outfile='test_structs/cloned')
+        # # check every point in the start chain against every point in its
+        # return is_clashing(clone_coords, [isolated_chain_ser_nums, clone_sns],
+        #                    threshold)
+        return False
     if check_method == 'heuristic':
         if rot_sym_clash_check(coordinates, multiplicity, radial_axis,
                                rot_axis, radius, center_sn, int(
                                    n_slices), int(n_rings),
-                               center_v=symmetry_center):
+                               center_v= cofr):
             print('clash in symmetry detected')
             return None
         else:
@@ -1721,7 +1735,7 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                 angle = 2*np.pi/multiplicity*n
                 current_chain = select(info_table, chain=chain_id)
                 for sn in current_chain:
-                    coordinates[sn] -= symmetry_center
+                    coordinates[sn] -= cofr
                     coordinates[sn] = coordinates[sn].rotate_arround(
                         angle, -rot_axis)
 
@@ -1729,25 +1743,6 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         if definitive_test():
             print('clash in symmetry detected')
 
-            ###### for testing only ####
-            # try:
-            #     for x in range(0, (multiplicity - 1)):
-            #         coordinates, info_table, new_chain = clone_chain(
-            #             coordinates, info_table, chain)
-            #         chain_group.append(new_chain[0])
-            # except ValueError:
-            #     print(f'chain {chain} does not exist or can not be copied.'
-            #           ' skipping.')
-            # for n, chain_id in enumerate(chain_group):
-            #     # print(f'n : {n}')
-            #     angle = 2*np.pi/multiplicity*n
-            #     current_chain = select(info_table, chain=chain_id)
-            #     for sn in current_chain:
-            #         coordinates[sn] -= symmetry_center
-            #         coordinates[sn] = coordinates[sn].rotate_arround(
-            #             angle, rot_axis)
-            # plot_model(coordinates)
-            #####################################
             return None, None
         else:
             try:
@@ -1759,10 +1754,11 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                 print(f'chain {chain} does not exist or can not be copied.'
                       ' skipping.')
             for n, chain_id in enumerate(chain_group):
+                write_pdb(coordinates, info_table, outfile='test_structs/line1776')
                 angle = 2*np.pi/multiplicity*n
                 current_chain = select(info_table, chain=chain_id)
+               
                 for sn in current_chain:
-                    coordinates[sn] -= symmetry_center
                     coordinates[sn] = coordinates[sn].rotate_arround(
                         angle, rot_axis)
     else:
