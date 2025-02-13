@@ -23,7 +23,7 @@ radial_res = 22
 radial_offset_angle = 0
 tilt_offset_angle = 0
 lean_offset_angle = 0
-radius = 1.1
+radius = 1.3
 offset_matrix = None
 chain = 'A'
 

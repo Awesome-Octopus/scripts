@@ -1665,7 +1665,8 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                                       axis_sn, radial_sn, info_table,
                                       target_basis=target_basis, 
                                       translate=translate)
-    radial_axis = vector(coordinates[center_sn] - cofr).project_onto_normal_plane(rot_axis).unitize()
+    radial_axis = vector(coordinates[center_sn] - cofr)
+    #.project_onto_normal_plane(rot_axis).unitize()
     print(radial_axis.dot(rot_axis))
 
 
@@ -1717,9 +1718,8 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         return False
     if check_method == 'heuristic':
         if rot_sym_clash_check(coordinates, multiplicity, radial_axis,
-                               rot_axis, radius, center_sn, int(
-                                   n_slices), int(n_rings),
-                               center_v= cofr):
+                               rot_axis, radius, center_sn, int(n_slices), 
+                               int(n_rings), center_v= cofr):
             print('clash in symmetry detected')
             return None
         else:
@@ -1743,6 +1743,25 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
         if definitive_test():
             print('clash in symmetry detected')
 
+            ###### for testing only ####
+            # try:
+            #     for x in range(0, (multiplicity - 1)):
+            #         coordinates, info_table, new_chain = clone_chain(
+            #             coordinates, info_table, chain)
+            #         chain_group.append(new_chain[0])
+            # except ValueError:
+            #     print(f'chain {chain} does not exist or can not be copied.'
+            #           ' skipping.')
+            # for n, chain_id in enumerate(chain_group):
+            #     # print(f'n : {n}')
+            #     angle = 2*np.pi/multiplicity*n
+            #     current_chain = select(info_table, chain=chain_id)
+            #     for sn in current_chain:
+            #         coordinates[sn] -= symmetry_center
+            #         coordinates[sn] = coordinates[sn].rotate_arround(
+            #             angle, rot_axis)
+            # plot_model(coordinates)
+            #####################################
             return None, None
         else:
             try:
@@ -1754,16 +1773,18 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                 print(f'chain {chain} does not exist or can not be copied.'
                       ' skipping.')
             for n, chain_id in enumerate(chain_group):
-                write_pdb(coordinates, info_table, outfile='test_structs/line1776')
+                # write_pdb(coordinates, info_table, outfile='test_structs/line1776')
                 angle = 2*np.pi/multiplicity*n
                 current_chain = select(info_table, chain=chain_id)
                
                 for sn in current_chain:
+                    coordinates[sn] -= cofr
                     coordinates[sn] = coordinates[sn].rotate_arround(
                         angle, rot_axis)
     else:
         raise ValueError("options for check_method argument are"
                          "'definitive' or 'heuristic'")
+    coordinates += cofr
     return coordinates, info_table
 
 def ref_point_input_check (coordinates, info_table, *ser_nums, **kwargs):
