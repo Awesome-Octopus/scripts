@@ -1773,7 +1773,7 @@ def axial_symmetry(coordinates, info_table, multiplicity, radius,
                 print(f'chain {chain} does not exist or can not be copied.'
                       ' skipping.')
             for n, chain_id in enumerate(chain_group):
-                # write_pdb(coordinates, info_table, outfile='test_structs/line1776')
+                write_pdb(coordinates, info_table, outfile='test_structs/line1776')
                 angle = 2*np.pi/multiplicity*n
                 current_chain = select(info_table, chain=chain_id)
                

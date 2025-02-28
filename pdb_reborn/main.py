@@ -78,7 +78,7 @@ group_basis = np.vstack((group_axis, group_rad_ax, group_norm_ax)).T
 ###############################################################################
 
 translation_vector = query_struct[query_center_sn] - coordinates[center_sn]
-
+print(f'translation vector {translation_vector}')
 #if we wish to rotate each monomer arround its own long axis paralell to 
 # the group symmetry axis
 #!!! change this to a matrix multiplication operation
