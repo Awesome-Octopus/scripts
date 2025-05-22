@@ -13,114 +13,73 @@ from matplotlib import pyplot as plt
 from vector_class import vector
 from io_funcs import import_pdb, plot_model, write_pdb
 from coord_funcs import cart2cylind, cylind2cart, change_basis, convert_angle
-from getter_setter import orient, select, random_backbone, axial_symmetry, get_basis
+from getter_setter import orient, select, random_backbone, get_basis, clone_chain
 
 
 
-center_res = 1
-axis_res = 1
-radial_res = 1
+center_res =22
+axis_res = 22
+radial_res = 22
 radial_offset_angle = 0
 tilt_offset_angle = 0
 lean_offset_angle = 0
 radius = 2
 offset_matrix = None
 chain = 'A'
+multiplicity = 5
 
 #
-coordinates, info_table = import_pdb('test_structs/test_system2.pdb')
+coordinates, info_table = import_pdb('5x29_S2E_translated.pdb')
 center_sn = select(info_table, res_num=center_res, chain=chain, atom_name='CA')[0]
 axis_sn = select(info_table, res_num=axis_res, chain=chain, atom_name='C')[0]
 radial_sn = select(info_table, res_num=radial_res, chain=chain, atom_name='N')[0]
 test_basis = get_basis(coordinates, center_sn, axis_sn, radial_sn)
-# print(test_basis)
+# print(f'test_basis:\n{test_basis}')
 
-query_struct, query_table = import_pdb('test_structs/coordinate_system2.pdb')
-query_center_sn = select(query_table, res_num=center_res, chain=chain, atom_name='CA')[0]
-query_axis_sn = select(query_table, res_num=axis_res, chain=chain, atom_name='C')[0]
-query_radial_sn = select(query_table, res_num=radial_res, chain=chain, atom_name='N')[0]
-query_basis = get_basis(query_struct, query_center_sn, query_axis_sn, query_radial_sn)
-print(f'query_basis: {query_basis}')
+query_struct, query_table = import_pdb('5X29.pdb')
 
-multiplicity = len(set(d['chain'] for d in query_table))
-#!!! everything on this line verified to be correct
+# store the index atom for each chain in the reference structure in a dictionary
+query_center_sn = {}
+query_axis_sn = {}
+query_radial_sn = {}
+query_basis = {}
 
 
-# ###### THE FOLLOWING CODE IS VERIFIED TO PRODUCE THE CORRECT GROUP AXIS #####
-center_pts = np.zeros((multiplicity,3))
-# print(f'center_pts: {center_pts}')
-axis_pts = np.zeros((multiplicity,3))
-center_sns = select(query_table, res_num=center_res, atom_name='CA')
-# print(f'center_sns: {center_sns}')
-axis_sns = select(query_table, res_num=axis_res, atom_name='C')
-# print(f'axis sns {axis_sns}')
-center_avg = vector([0,0,0])
-axis_avg = vector([0,0,0])
 
-# get the mean position of the same atom across the chains of the reference structure
-# use the difference in mean position between a center and axis points to define
-# an axis of symmetry
-for n in range(multiplicity):
-    center_avg = center_avg + query_struct[center_sns[n]]
-    axis_avg = axis_avg + query_struct[axis_sns[n]]
+test = orient(coordinates, center_sn, axis_sn, radial_sn, query_struct)
+
+
+# get the basis for each chain in the symetric multimer you wish to average over
+for ch in set(query_table[i]['chain'] for i in range(len(query_table))):
+    query_center_sn = select(query_table, res_num=center_res, chain=ch, atom_name='CA')[0]
+    query_axis_sn = select(query_table, res_num=axis_res, chain=ch, atom_name='C')[0]
+    query_radial_sn = select(query_table, res_num=radial_res, chain=ch, atom_name='N')[0]
+    query_basis[ch] = get_basis(query_struct, query_center_sn, query_axis_sn, query_radial_sn)
+
+# the basis for the whole symmetry group is the average of their bases
+# this provides the long axis and the center of geometry, but
+# the radial and norm axis are taken from the first chain of the symetry system
+# because they usually otherwise end up cancelling each other out.
+group_basis = np.zeros((4,4))
+for ch in query_basis.keys():  
+    group_basis += query_basis[ch]
     
+group_basis = group_basis/len(query_basis)
+group_basis[1:3, :3] = query_basis[chain][1:3, :3]
     
-# If you picked center atoms and axis atoms such that the average of the long 
-# axis vector for each monomer is 0, it causes a problem. In such case at least
-# one atom was defined wrong. warn the user to correct.     
-    try:   
-        group_axis = (axis_avg/multiplicity - center_avg/multiplicity).unitize()
-        # print(f'group axis:\n{group_axis}')
-    except ZeroDivisionError:
-        print('the atoms you have selected define the long axes of each monomer to',
-          'cancel each other out.\n Are you sure you defined your axes correctly?')
-# #/### DEFINE GROUP BASIS########################################################
-# we then use this to define a basis for the symmetry group
-# first a radial axis, which is the group center to the center atom of chain A
-if multiplicity > 1:
-    group_rad_ax = (query_struct[center_sns[0]] - 
-                    center_avg).project_onto_normal_plane(group_axis).unitize()
-
-# if the reference structure is only one chain just use the projection of the 
-# vector formed by the radial reference atom coordinate - center reference atom
-# coordinate onto the normal plane of the long symmetry axis
-else:
-    group_rad_ax = (query_struct[query_radial_sn] - \
-    center_avg).project_onto_normal_plane(group_axis).unitize()
-        
-# print(group_rad_ax, group_axis)
-# then the norm, which is the cross product
-group_norm_ax = vector(np.cross(group_axis, group_rad_ax))
-group_basis = np.vstack((group_axis, group_rad_ax, group_norm_ax))
-
-# #############################################################################
-
-translation_vector = center_avg - coordinates[center_sn] + group_rad_ax*radius
-coordinates += translation_vector
-
-#if we wish to rotate each monomer arround its own long axis paralell to 
-# the group symmetry axis
-# !!! change this to a matrix multiplication operation
-if radial_offset_angle !=0:
-    for ndx, row in enumerate(coordinates):
-        coordinates[ndx]  = vector(coordinates[ndx]).rotate_arround(
-            radial_offset_angle, vector(query_basis[0]))
-
-
-if offset_matrix is not None:
-    coordinates = coordinates @ offset_matrix.T
-
-
-multimer_coords, info_table = axial_symmetry(coordinates, info_table, 
-                                             multiplicity, radius, 
-                                             center_sn, axis_sn, radial_sn,
-                                             target_basis=query_basis,
-                                             cofr=center_avg, 
-                                             rot_axis=group_axis,
-                                             threshold=0.36)
-
-if multimer_coords is not None and info_table is not None:
-    write_pdb(multimer_coords, info_table, 'test_structs/test')
-else:
-    print("the requested radius for multimerization is too small")
+print(group_basis)
+chains_added = []
+for i in range(multiplicity-1):
+    test, info_table, ch = clone_chain(test, info_table, [chain])
+    chains_added.append(ch[0])
     
+group_center = group_basis[:3, 3].T
+for i, ch in enumerate(chains_added):
+    same_chain_sns = select(info_table, chain=chains_added[i])
+    for sn in same_chain_sns:
+        test[sn] -= group_center
+        test[sn] = test[sn].rotate_arround(2*np.pi/multiplicity*(i+1), vector(group_basis[0, :3]))
+        test[sn] += group_center
+    
+write_pdb(test, info_table, 'test_structs/test')
+
