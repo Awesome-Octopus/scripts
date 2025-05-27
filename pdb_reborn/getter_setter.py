@@ -1505,6 +1505,7 @@ def clone_chain(coordinates, info_table, chain_list=None):
     # getting started, we need to know what chains we want copied, and which
     # ones already exist
     existing_chains = list({entry['chain'] for entry in info_table})
+    
     if chain_list is None:
         # if no chain was specified, select all chains
         chain_list = existing_chains

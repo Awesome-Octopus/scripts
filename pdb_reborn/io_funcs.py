@@ -26,7 +26,7 @@ def import_pdb(fname=None):
     parser = PDBParser(PERMISSIVE=1)
     # permissive=1 allows it to accept incomplete structures without error
     whole_pdb = parser.get_structure(outfile_name, fname)
-    print(f'Coordinates for {fname} imported.')
+    # print(f'Coordinates for {fname} imported.')
     n = 0
     info_table = []
     coordinates = []
@@ -60,6 +60,7 @@ def import_pdb(fname=None):
 
 
 def plot_model(coordinates, fig=None, title='structure', plots_per_row=3):
+
 
     i = coordinates[:, 0]
     j = coordinates[:, 1]
@@ -179,7 +180,9 @@ def write_pdb(coordinates, info_table, outfile=None):
     # the TER line gets its own serial number and we have to increase all
     # subsequent serial numbers by 1 for each TER we have encountered
 
+
     for n, a in enumerate(info_table):
+        
         new_ser_num = new_ser_num + 1
         element = a['atom_name'][0]
 
@@ -219,6 +222,8 @@ def write_pdb(coordinates, info_table, outfile=None):
                 num_termini = 0
                 new_ser_num = 1
                 # reset the numbering when you encounter a new model
+        # print(f'{coordinates[n]}')
+        # print(f'{coordinates[n][1]:>8.3f}')
         f.write(
             f'{tag}{new_ser_num:>5d} {a["atom_name"]:<4s} {a["res_name"]:<4s}'
             f'{a["chain"]}{a["res_num"]:>4d}{coordinates[n][0]:>12.3f}'
