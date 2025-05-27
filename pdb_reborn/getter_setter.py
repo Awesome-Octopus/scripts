@@ -863,9 +863,13 @@ def rot_sym_clash_check(coordinates, **kwargs):
     # copy subset of coordinates and recenter on center_v
     cylind_coords = coordinates.copy()
     cylind_coords -= center_v
-
+    # print(kwargs)
+    if rot_ax is None:
+        raise ValueError('To evaluate clashes between radially symmetric subunits, an axis of symmetry must be provided')
     if not rot_ax.is_nonzero():
         raise ValueError('The axis of rotation cannot be the zero vector')
+    if radial_v is None:
+        raise ValueError('To evaluate clashes between radially symmetric subunits, a radial axis must be provided')
     if not radial_v.is_nonzero():
         raise ValueError('The radial axis cannot be the zero vector')
 
@@ -936,7 +940,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
         kwargs['center_v'] = coordinates[center_sn]
 
-        def symmetry_clash(coordinates):
+        def symmetry_clash(coordinates, **kwargs):
             return rot_sym_clash_check(coordinates, **kwargs)
     else:
         # if symmetry is not to be considered just return false
@@ -1100,44 +1104,44 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
             if c_anchored_segments[i] != []:
 
                 for num in c_anchored_segments[i]:
-                    try:
+                    # try:
+                    set_phi_psi(coordinates, info_table,
+                                random.uniform(0, 2*np.pi),
+                                angle_type='phi', anchor='C', res_num=num,
+                                chain=chainlist[i])
+
+                    # if your backbone adjustment resulted in a clash,
+                    # retry with a different random angle
+                    # print(f'\n---model: {ndx} residue: {num} ', end='')
+                    tries = 0
+                    print(radial_v.is_orthogonal(axis_vector))
+                    while (symmetry_clash(coordinates, **kwargs) or
+                           check_internal_clash(coordinates,
+                                                   info_table,
+                                                   cutoff_distance,
+                                                   angle_type='phi',
+                                                   anchor='C',
+                                                   res_num=num,
+                                                   chain=chainlist[i])) \
+                            and tries < max_tries:
+
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
-                                    angle_type='phi', anchor='C', res_num=num,
-                                    chain=chainlist[i])
+                                    angle_type='phi', anchor='C',
+                                    res_num=num, chain=chainlist[i])
 
-                        # if your backbone adjustment resulted in a clash,
-                        # retry with a different random angle
-                        print(f'\n---model: {ndx} residue: {num} ', end='')
-                        tries = 0
-                        while ( #symmetry_clash(coordinates)
-                               #or
-                               check_internal_clash(coordinates,
-                                                       info_table,
-                                                       cutoff_distance,
-                                                       angle_type='phi',
-                                                       anchor='C',
-                                                       res_num=num,
-                                                       chain=chainlist[i])) \
-                                and tries < max_tries:
-
-                            set_phi_psi(coordinates, info_table,
-                                        random.uniform(0, 2*np.pi),
-                                        angle_type='phi', anchor='C',
-                                        res_num=num, chain=chainlist[i])
-
-                            tries += 1
-                            if tries < max_tries:
-                                print('.', end='')
-                            else:
-                                print(f'The maximum number of attempts to '
-                                      f'unclash model number {ndx} was '
-                                      'reached. The model has been discarded.')
-                    except ValueError:
-                        print(f'Cant set phi angle for N-terminus or proline'
-                              f' at residue {num} of model number {ndx}. '
-                              'Skipping this residue')
-                        pass
+                        tries += 1
+                        if tries < max_tries:
+                            print('.', end='')
+                        else:
+                            print(f'The maximum number of attempts to '
+                                  f'unclash model number {ndx} was '
+                                  'reached. The model has been discarded.')
+                    # except ValueError:
+                    #     print(f'Cant set phi angle for N-terminus or proline'
+                    #           f' at residue {num} of model number {ndx}. '
+                    #           'Skipping this residue')
+                    #     pass
                     try:
                         print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
@@ -1145,8 +1149,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='C',
                                     res_num=num, chain=chainlist[i])
-                        while (
-                                # symmetry_clash(coordinates) or
+                        while (symmetry_clash(coordinates, **kwargs) or
                                 check_internal_clash(coordinates,
                                                        info_table,
                                                        cutoff_distance,
@@ -1182,8 +1185,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         # with a different random angle
 
                         tries = 0
-                        while (#symmetry_clash(coordinates)
-                              # or
+                        while (symmetry_clash(coordinates, **kwargs) or
                                check_internal_clash(coordinates,
                                                        info_table,
                                                        cutoff_distance,
@@ -1217,8 +1219,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-                        while (#symmetry_clash(coordinates)
-                               #or
+                        while (symmetry_clash(coordinates, **kwargs) or
                                check_internal_clash(coordinates,
                                                        info_table,
                                                        cutoff_distance,
@@ -1248,13 +1249,13 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
 
 def get_rot_mat(A, B):
-    
+
     """
     Computes the rotation matrix that transforms the basis A to the basis B.
 
-    This function assumes that the input bases A and B are provided as sets of 
-    row vectors, where each row represents a vector in the basis. The order of 
-    the input bases matters, as the function computes the transformation from 
+    This function assumes that the input bases A and B are provided as sets of
+    row vectors, where each row represents a vector in the basis. The order of
+    the input bases matters, as the function computes the transformation from
     basis A to basis B.
 
     The resulting rotation matrix R satisfies the equation:
@@ -1262,39 +1263,39 @@ def get_rot_mat(A, B):
     where A and B are the input bases, and R is the rotation matrix.
 
     Args:
-        A (ndarray): An nxn numpy array representing the first basis, where each 
+        A (ndarray): An nxn numpy array representing the first basis, where each
                      row is a vector in the basis.
-        B (ndarray): An nxn numpy array representing the second basis, where each 
+        B (ndarray): An nxn numpy array representing the second basis, where each
                      row is a vector in the basis.
 
     Returns:
-        ndarray: An nxn numpy array representing the rotation matrix that transforms 
+        ndarray: An nxn numpy array representing the rotation matrix that transforms
                  basis A to basis B.
 
     Raises:
-        ValueError: If the input bases A and B do not have the same dimensions 
+        ValueError: If the input bases A and B do not have the same dimensions
                     or are not orthonormal.
 
     Notes:
-        - The input matrices A and B must be orthonormal bases (i.e., their rows 
+        - The input matrices A and B must be orthonormal bases (i.e., their rows
           must be unit vectors and orthogonal to each other).
-        - The order of the input bases matters. Swapping A and B will give a 
+        - The order of the input bases matters. Swapping A and B will give a
           different rotation matrix.
     """
     # Function implementation here
 
-    
+
     # Check if the dimensions match
     if A.shape != B.shape:
         raise ValueError(f"Dimension mismatch: A has shape {A.shape}, B has shape {B.shape}.")
-    
+
     # Check if the matrices are square (necessary for orthonormal bases)
     if A.shape[0] != A.shape[1] or B.shape[0] != B.shape[1]:
         raise ValueError("Both A and B must be square matrices for orthonormal bases.")
-    
+
     # Compute the rotation matrix R = A * B^T
     R = np.dot(A.T, B)
-    
+
     return R
 
 
@@ -1302,7 +1303,7 @@ def get_basis(coords, center_sn, axis_sn, radial_sn):
 
     if len({center_sn, axis_sn, radial_sn}) != 3:
         raise ValueError('the same serial number was provided for multiple defining atoms when constructing a basis set. 3 unique points are required.')
-    
+
     central_atom = coords[center_sn].copy()
     principle_axis = vector(coords[axis_sn] - central_atom)
     principle_axis = principle_axis.unitize()
@@ -1317,15 +1318,15 @@ def get_basis(coords, center_sn, axis_sn, radial_sn):
     norm_axis = vector(np.cross(principle_axis, radial_axis))
 
     basis = np.vstack((principle_axis, radial_axis, norm_axis))
-    
+
     # convert to 4x4 homogeneous coordinates
     if np.linalg.det(basis) != 0:
         basis = np.hstack((basis,central_atom.reshape(-1,1)))
         basis = np.vstack((basis, np.array([[0, 0, 0, 1]])))
         # print(f'basis dimensions {basis.shape}')
-     
+
         return basis
-        
+
     else:
         raise ValueError('for the given set of coordinates and serial numbers',
                          'defining center, axial, and radial axes, a valid ',
@@ -1333,17 +1334,17 @@ def get_basis(coords, center_sn, axis_sn, radial_sn):
 
 
 
-def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn, 
+def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
            target_coords, **kwargs):
 
     """
-    
-    will transform the source coordinates onto a second structure based on the 
-    current basis formed by the atoms at the supplied indices. 
+
+    will transform the source coordinates onto a second structure based on the
+    current basis formed by the atoms at the supplied indices.
     Alternatively, a 3x3 matrix of a target basis set can be provided, with an
     optional translation vector.
-    By default, both rotation and translation are applied. 
-    If only rotation is required, set the `translate` keyword 
+    By default, both rotation and translation are applied.
+    If only rotation is required, set the `translate` keyword
     argument to `False`.
 
     Parameters:
@@ -1362,7 +1363,7 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
 
     target_coords : numpy.ndarray
             The coordinates of the target object as a 2D array (n x 3).
-    
+
 
     **kwargs : dict, optional
         A dictionary of keyword arguments:
@@ -1377,10 +1378,10 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
 
         - `target_axis_sn` (int): If given, the index for the atom to be used as
             the principle axis coordinate, otherwise assigned the same as source_axis_sn
-            
+
         - 'translate' (bool): if True (default), it will translate coodinate
         system center onto the target coordinate system center,
-        
+
             NOTE: either all three target coordinates keywords must be supplied, or none.
             incomplete set of serial indices raises an error. If a target basis
             is supplied, target_coords and target_xxx_sn must not be provided.
@@ -1388,13 +1389,13 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
 
     Returns:
     -------
-    
+
     rotated_translated_source_coords : numpy.ndarray
         a 3 by x set of vectors of the input points after both operations are applied
-    
+
     transformation_matrix : numpy.ndarray
         A 4x4 matrix that aligns the source coordinates to the target coordinates.
-        
+
     Raises:
     ------
     ValueError
@@ -1405,36 +1406,36 @@ def orient(source_coords, source_center_sn, source_axis_sn, source_radial_sn,
     target_radial_sn = kwargs.get('target_radial_sn', None)
     target_center_sn = kwargs.get('target_center_sn', None)
     target_axis_sn = kwargs.get('target_axis_sn', None)
-    
-    
+
+
     v = [tf is None for tf in (target_axis_sn, target_center_sn, target_radial_sn)]
-        
+
     if all(v):
             target_radial_sn = source_radial_sn
             target_center_sn = source_center_sn
-            target_axis_sn = source_axis_sn 
-                        
+            target_axis_sn = source_axis_sn
+
     elif any (v):
         raise ValueError ('missing one or more indices to define the target,'
                           ' axis, or missing the target structure itself. ,'
                           'If none are given the same set from the source ,'
                           'structure is used by default')
-    
+
     source_basis = get_basis(source_coords, source_center_sn, source_axis_sn, source_radial_sn)
     # print(source_basis)
     target_basis = get_basis(target_coords, target_center_sn, target_axis_sn, target_radial_sn)
     # print(target_basis)
-            
+
     source_center = source_basis[:3,3].T
     target_center = target_basis[:3,3].T
-    
+
     rotation_matrix = get_rot_mat(source_basis[:3,:3], target_basis[:3,:3])
     new_coords = source_coords.copy() - source_center
     new_coords = new_coords @ rotation_matrix
-    
+
     if translate is False:
         new_coords += source_center
-    
+
     else:
         new_coords += target_center
     return new_coords
@@ -1505,7 +1506,7 @@ def clone_chain(coordinates, info_table, chain_list=None):
     # getting started, we need to know what chains we want copied, and which
     # ones already exist
     existing_chains = list({entry['chain'] for entry in info_table})
-    
+
     if chain_list is None:
         # if no chain was specified, select all chains
         chain_list = existing_chains
