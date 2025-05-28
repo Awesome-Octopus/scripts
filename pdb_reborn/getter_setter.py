@@ -878,9 +878,7 @@ def rot_sym_clash_check(coordinates, **kwargs):
     # radial_v
     cylind_coords = cart2cylind(cylind_coords, center_v, rot_ax, radial_v)
 
-    will_clash = onion_method()
-
-    return will_clash
+    return onion_method()
 
 
 def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
@@ -939,7 +937,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     if center_sn and radial_sn:
 
         kwargs['center_v'] = coordinates[center_sn]
-
+        
         def symmetry_clash(coordinates, **kwargs):
             return rot_sym_clash_check(coordinates, **kwargs)
     else:
@@ -1104,44 +1102,44 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
             if c_anchored_segments[i] != []:
 
                 for num in c_anchored_segments[i]:
-                    # try:
-                    set_phi_psi(coordinates, info_table,
-                                random.uniform(0, 2*np.pi),
-                                angle_type='phi', anchor='C', res_num=num,
-                                chain=chainlist[i])
-
-                    # if your backbone adjustment resulted in a clash,
-                    # retry with a different random angle
-                    # print(f'\n---model: {ndx} residue: {num} ', end='')
-                    tries = 0
-                    print(radial_v.is_orthogonal(axis_vector))
-                    while (symmetry_clash(coordinates, **kwargs) or
-                           check_internal_clash(coordinates,
-                                                   info_table,
-                                                   cutoff_distance,
-                                                   angle_type='phi',
-                                                   anchor='C',
-                                                   res_num=num,
-                                                   chain=chainlist[i])) \
-                            and tries < max_tries:
-
+                    try:
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
-                                    angle_type='phi', anchor='C',
-                                    res_num=num, chain=chainlist[i])
-
-                        tries += 1
-                        if tries < max_tries:
-                            print('.', end='')
-                        else:
-                            print(f'The maximum number of attempts to '
-                                  f'unclash model number {ndx} was '
-                                  'reached. The model has been discarded.')
-                    # except ValueError:
-                    #     print(f'Cant set phi angle for N-terminus or proline'
-                    #           f' at residue {num} of model number {ndx}. '
-                    #           'Skipping this residue')
-                    #     pass
+                                    angle_type='phi', anchor='C', res_num=num,
+                                    chain=chainlist[i])
+    
+                        # if your backbone adjustment resulted in a clash,
+                        # retry with a different random angle
+                        # print(f'\n---model: {ndx} residue: {num} ', end='')
+                        tries = 0
+    
+                        # while (symmetry_clash(coordinates, **kwargs) or
+                        while(check_internal_clash(coordinates,
+                                                       info_table,
+                                                       cutoff_distance,
+                                                       angle_type='phi',
+                                                       anchor='C',
+                                                       res_num=num,
+                                                       chain=chainlist[i])) \
+                                and tries < max_tries:
+    
+                            set_phi_psi(coordinates, info_table,
+                                        random.uniform(0, 2*np.pi),
+                                        angle_type='phi', anchor='C',
+                                        res_num=num, chain=chainlist[i])
+    
+                            tries += 1
+                            if tries < max_tries:
+                                print('.', end='')
+                            else:
+                                print(f'The maximum number of attempts to '
+                                      f'unclash model number {ndx} was '
+                                      'reached. The model has been discarded.')
+                    except ValueError:
+                        print(f'Cant set phi angle for N-terminus or proline'
+                              f' at residue {num} of model number {ndx}. '
+                              'Skipping this residue')
+                        pass
                     try:
                         print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
@@ -1149,8 +1147,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='C',
                                     res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs) or
-                                check_internal_clash(coordinates,
+                        # while (symmetry_clash(coordinates, **kwargs) or
+                        while(check_internal_clash(coordinates,
                                                        info_table,
                                                        cutoff_distance,
                                                        angle_type='psi',
@@ -1185,8 +1183,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         # with a different random angle
 
                         tries = 0
-                        while (symmetry_clash(coordinates, **kwargs) or
-                               check_internal_clash(coordinates,
+                        # while (symmetry_clash(coordinates, **kwargs) or
+                        while(check_internal_clash(coordinates,
                                                        info_table,
                                                        cutoff_distance,
                                                        angle_type='phi',
@@ -1219,8 +1217,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs) or
-                               check_internal_clash(coordinates,
+                        # while #(symmetry_clash(coordinates, **kwargs) or
+                        while(check_internal_clash(coordinates,
                                                        info_table,
                                                        cutoff_distance,
                                                        angle_type='psi',

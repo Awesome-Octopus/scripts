@@ -30,10 +30,10 @@ multiplicity = 5
 
 
 # NOT YET IMPLEMENTED
-radial_offset_angle = 0
-tilt_offset_angle = 0
-lean_offset_angle = 0
-offset_matrix = None
+# radial_offset_angle = 0
+# tilt_offset_angle = 0
+# lean_offset_angle = 0
+# offset_matrix = None
 
 
 
@@ -62,24 +62,10 @@ for ch in query_chains:
 # the average of all the atoms defining the center points of each chain
 center_pt = vector(np.mean(np.asarray(center_pts), axis=0))
 
-# the group basis is the average of all the bases of the query chains
-a = np.asarray(query_basis)
-# unitize the inner matrix
-group_basis = np.mean(a, axis=0)
-for i in range(3):
-    group_basis[i, :3] = group_basis[i, :3].view(vector).unitize()
-
-randomized, info_table = random_backbone(coordinates, info_table, 1,
-                                         'residues.txt', chain_list=['A'],
-                                         center_sn=center_sn,
-                                         radial_sn=radial_sn,
-                                         radial_v=vector(group_basis[1,:3].copy()),
-                                         axis_vector=vector(group_basis[0, :3].copy()))
-
-oriented = orient(randomized, center_sn, axis_sn, radial_sn, query_struct,
-              target_center_sn=query_center_sn,
-              target_radial_sn=query_radial_sn, target_axis_sn=query_axis_sn)
-# # write_pdb(test, info_table, 'test_structs/oriented')
+group_basis = np.mean(np.asarray(query_basis), axis=0)
+symmetry_axis = group_basis[0, :3].view(vector).unitize()
+radial_axis = query_basis[0][1,:3].view(vector).project_onto_normal_plane(symmetry_axis).unitize()
+norm_axis = np.cross(symmetry_axis, radial_axis).view(vector)
 
 # find the average distance of the center coordinate of each chain from the
 # center of the group
@@ -91,38 +77,58 @@ query_radius = query_radius/len(query_chains)
 # how wide you want the radius of the circular arrangement of monomers to be
 radius = query_radius
 
-# make n-1 new identical chains of your oriented chain
-for i in range(multiplicity-1):
-    oriented, info_table, _ = clone_chain(oriented, info_table, [chain])
 
-target_chains = set(info_table[i]['chain'] for i in range(len(info_table)))
+oriented = orient(coordinates, center_sn, axis_sn, radial_sn, query_struct,
+              target_center_sn=query_center_sn,
+              target_radial_sn=query_radial_sn, target_axis_sn=query_axis_sn)
 
-for i, ch in enumerate(target_chains):
+randomized, info_table = random_backbone(oriented, info_table, 1,
+                                         'residues.txt', chain_list=['A'],
+                                         center_sn=center_sn, radius=radius,
+                                         radial_sn=radial_sn,
+                                         radial_v=radial_axis,
+                                         axis_vector=symmetry_axis, 
+                                         multiplicity=multiplicity,
+                                         cutoff_distance=0.5)
 
-    same_chain_sns = select(info_table, chain=ch)
+write_pdb(randomized, info_table, 'test_structs/test')
 
-    # translate to put group center point at 0,0,0
-    oriented[same_chain_sns] = oriented[same_chain_sns] - center_pt
+# # # write_pdb(test, info_table, 'test_structs/oriented')
 
-    # find the length of the coordinate of the center atom for the chain to be
-    # manipulated
-    curr_rad = oriented[select(info_table, res_num=center_res, atom_name='CA',
-                               chain=ch)].get_length()
 
-    # find the diference between how much you want the radius to be and its
-    # current value
-    delta_rad = radius - curr_rad
 
-    # make a vector that moves the current position so that the radius
-    # from the center point will be as desired
-    delta_vect = delta_rad*oriented[select(info_table, res_num=center_res,
-                                       atom_name='CA', chain=ch)].copy().unitize()
+# # make n-1 new identical chains of your oriented chain
+# for i in range(multiplicity-1):
+#     oriented, info_table, _ = clone_chain(oriented, info_table, [chain])
 
-    for sn in same_chain_sns:
-        oriented[sn] = oriented[sn] + delta_vect
-        oriented[sn] = oriented[sn].rotate_arround(
-            2*np.pi/multiplicity*(i+1), vector(group_basis[0, :3]))
+# target_chains = set(info_table[i]['chain'] for i in range(len(info_table)))
 
-    oriented[same_chain_sns] = oriented[same_chain_sns] + center_pt
+# for i, ch in enumerate(target_chains):
 
-write_pdb(oriented, info_table, 'test_structs/randomized_pentamer_')
+#     same_chain_sns = select(info_table, chain=ch)
+
+#     # translate to put group center point at 0,0,0
+#     oriented[same_chain_sns] = oriented[same_chain_sns] - center_pt
+
+#     # find the length of the coordinate of the center atom for the chain to be
+#     # manipulated
+#     curr_rad = oriented[select(info_table, res_num=center_res, atom_name='CA',
+#                                chain=ch)].get_length()
+
+#     # find the diference between how much you want the radius to be and its
+#     # current value
+#     delta_rad = radius - curr_rad
+
+#     # make a vector that moves the current position so that the radius
+#     # from the center point will be as desired
+#     delta_vect = delta_rad*oriented[select(info_table, res_num=center_res,
+#                                        atom_name='CA', chain=ch)].copy().unitize()
+
+#     for sn in same_chain_sns:
+#         oriented[sn] = oriented[sn] + delta_vect
+#         oriented[sn] = oriented[sn].rotate_arround(
+#             2*np.pi/multiplicity*(i+1), vector(group_basis[0, :3]))
+
+#     oriented[same_chain_sns] = oriented[same_chain_sns] + center_pt
+
+# write_pdb(oriented, info_table, 'test_structs/randomized_pentamer_')

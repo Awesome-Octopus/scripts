@@ -1,0 +1,5 @@
+MODEL        1                                                                
+ATOM      1 N    MET A   1       6.786   0.486  10.072  1.00  0.00           N
+TER       2      MET A   1                                                        
+ENDMDL                                                                          
+END                                                                             
