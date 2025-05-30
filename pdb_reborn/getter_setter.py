@@ -255,8 +255,10 @@ def measure_dihedral(set_of_points, **kwargs):
     normal_plane2 = vector(np.cross(b_to_c, b_to_d))
 
     crossp = np.cross(normal_plane1, normal_plane2)
-    theta = normal_plane1.angle_between(normal_plane2)
-
+    try:
+        theta = normal_plane1.angle_between(normal_plane2)
+    except ZeroDivisionError as e:
+        raise ValueError('Bad input for measuring dihedral angle. Points are not unique.') from e
     # the way to determine whether this angle should be a positive or negative
     # is to see if the cross product of the plane normals is parallel or
     # anti-parallel to the axis of rotation as determined by the dot product
@@ -326,7 +328,11 @@ def get_phi_psi(coordinates, info_table, **kwargs):
                 if group[0] is not None:  # if there was a prev residue
                     vects = [coordinates[sn] for sn in group[0:4]]
                     # pass first 4
-                    phi = measure_dihedral(vects, debug_mode=True)
+                    try:
+                        phi = measure_dihedral(vects, debug_mode=True)
+                    except ValueError as e:
+                        print('Two neighboring atoms have the same coordinates. Inspect your input')
+                        raise
                     for sn in group[1:4]:
                         info_table[sn]['phi'] = phi
                 else:  # else phi is NaN
@@ -335,7 +341,11 @@ def get_phi_psi(coordinates, info_table, **kwargs):
                 if group[-1] is not None:  # if there is a next residue
                     # pass last 4, reversed
                     vects = [coordinates[sn] for sn in group[1:]]
-                    psi = measure_dihedral(vects)
+                    try:
+                        psi = measure_dihedral(vects)
+                    except ValueError as e:
+                        print('Two neighboring atoms have the same coordinates. Inspect your input')
+                        raise
                     for sn in group[1:-1]:
                         info_table[sn]['psi'] = psi
                 else:  # else psi is NaN
@@ -492,7 +502,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
 
             current_angle = info_table[ser_num][angle_type]
         # if it is still undefined, you cannot take the angle
-        if math.isnan(current_angle):
+        if current_angle is None or math.isnan(current_angle):
             return None
         else:
             return (target_angle - current_angle)
@@ -747,10 +757,10 @@ def rot_sym_clash_check(coordinates, **kwargs):
     n_rings = kwargs.get('n_rings', 20)
     cutoff_distance = kwargs.get('cutoff_distance', 0.36)
     symmetry_center = kwargs.get('symmetry_center', None)
-    print(f'symmetry_center: {kwargs["symmetry_center"]}')
+    # print(f'symmetry_center: {kwargs["symmetry_center"]}')
 
     def onion_method():
-        print('--------------------------------------')
+        # print('--------------------------------------')
         # get the highest and lowest values of theta
         # an easy hueristic is that if the angle needed to contain
         # all the point of a monomer in an arc arround the center
@@ -853,10 +863,11 @@ def rot_sym_clash_check(coordinates, **kwargs):
 
                                 if diff <= -np.pi/multiplicity/2 or diff \
                                         >= np.pi/multiplicity/2:
-                                    print('sssss')
+                                    # print('sssss')
                                     return True
                                 else:
-                                    print('hooray, much winner is you!')
+                                    pass
+                                    # print('hooray, much winner is you!')
                     height_ndx_bins[i] = rad_ndx_bins
 
         # if the function got this far there is no clash
@@ -966,7 +977,7 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
         q = coordinates[center_sn] + axis_vector
         debug_out = np.vstack(
             (coordinates[center_sn], kwargs['symmetry_center'], q))
-        write_pdb(debug_out, info_table[:3], 'test_structs/test_basis')
+        # write_pdb(debug_out, info_table[:3], 'test_structs/test_basis')
 
         def symmetry_clash(coordinates, **kwargs):
             return rot_sym_clash_check(coordinates, **kwargs)
@@ -1127,12 +1138,16 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
     # loop the generation for each of the n_structs you want to generate
 
     for ndx in range(0, n_structs):
+        if len(c_anchored_segments) == 0:
+            raise ValueError('currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
         for i in range(len(c_anchored_segments)):
 
             if c_anchored_segments[i] != []:
 
                 for num in c_anchored_segments[i]:
+                    # print(f'were working on the c anchored residue {num}')
                     try:
+                        # print(f'on the phi bond')
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='phi', anchor='C', res_num=num,
@@ -1143,14 +1158,14 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         # print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
 
-                        while (symmetry_clash(coordinates, **kwargs)  # or
-                               # check_internal_clash(coordinates, info_table,
-                               # cutoff_distance,
-                               # angle_type='phi',
-                               # anchor='C',
-                               # res_num=num,
-                               # chain=chainlist[i]))
-                                and tries < max_tries):
+                        while ((symmetry_clash(coordinates, **kwargs) or
+                               check_internal_clash(coordinates, info_table,
+                                                    cutoff_distance,
+                                                    angle_type='phi',
+                                                    anchor='C',
+                                                    res_num=num,
+                                                    chain=chainlist[i])) \
+                            and tries < max_tries):
 
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1171,20 +1186,21 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                               'Skipping this residue')
                         pass
                     try:
-                        print(f'\n---model: {ndx} residue: {num} ', end='')
+                        # print(f'\n---model: {ndx} residue: {num} ', end='')
+                        # print('on the psi bond')
                         tries = 0
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='C',
                                     res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs)  # or
-                               # check_internal_clash(coordinates,
-                               # info_table,
-                               # cutoff_distance,
-                               # angle_type='psi',
-                               # anchor='C',
-                               # res_num=num,
-                               # chain=chainlist[i]))
+                        while ((symmetry_clash(coordinates, **kwargs) or
+                                check_internal_clash(coordinates,
+                                                     info_table,
+                                                     cutoff_distance,
+                                                     angle_type='psi',
+                                                     anchor='C',
+                                                     res_num=num,
+                                                     chain=chainlist[i]))
                                 and tries < max_tries):
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1203,7 +1219,9 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         pass
             if n_anchored_segments[i] != []:
                 for num in n_anchored_segments[i]:
+                    # print(f'were working on the n anchored residue {num}')
                     try:
+                        # print('on the phi bond')
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='phi', anchor='N',
@@ -1211,18 +1229,18 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         print(f'\n---model: {ndx} residue: {num} ', end='')
                         # if your backbone adjustment resulted in a clash, retry
                         # with a different random angle
-                        write_pdb(coordinates, info_table,
-                                  'test_structs/randomized_oriented')
+                        # write_pdb(coordinates, info_table,
+                        #           'test_structs/randomized_oriented')
                         tries = 0
-                        # while (symmetry_clash(coordinates, **kwargs)  # or
-                        while (check_internal_clash(coordinates,
+                        while (symmetry_clash(coordinates, **kwargs) or
+                              (check_internal_clash(coordinates,
                                                     info_table,
                                                     cutoff_distance,
                                                     angle_type='phi',
                                                     anchor='N',
                                                     res_num=num,
-                                                    chain=chainlist[i])) \
-                                and (tries < max_tries):
+                                                    chain=chainlist[i]))) \
+                            and (tries < max_tries):
                             print('there was a clash')
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
@@ -1243,19 +1261,19 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         pass
                     try:
                         tries = 0
-
+                        # print('on the psi bond')
                         set_phi_psi(coordinates, info_table,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs)  # or
-                               # check_internal_clash(coordinates,
-                               # info_table,
-                               # cutoff_distance,
-                               # angle_type='psi',
-                               # anchor='N',
-                               # res_num=num,
-                               # chain=chainlist[i]))
+                        while (symmetry_clash(coordinates, **kwargs) or
+                               check_internal_clash(coordinates,
+                                                    info_table,
+                                                    cutoff_distance,
+                                                    angle_type='psi',
+                                                    anchor='N',
+                                                    res_num=num,
+                                                    chain=chainlist[i])
                                 and tries < max_tries):
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
