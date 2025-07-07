@@ -46,7 +46,7 @@ query_chains = list(set(query_table[i]['chain']
 
 # CHANGE THIS TO CHANGE FROM A PENTAMER TO ANOTHER NUMBER IF DESIRED
 # multiplicity = len(query_chains)
-multiplicity = 2
+multiplicity = 20
 
 query_basis = []
 
@@ -92,8 +92,8 @@ query_radius = query_radius/len(query_chains)
 
 # how wide you want the radius of the circular arrangement of monomers to be
 # radius = query_radius
-radius = 7
-print(f'radius: {radius}')
+radius = query_radius
+# print(f'radius: {radius}')
 
 # --------------DEBUG BLOCK--------------
 # b = symmetry_center + symmetry_axis
@@ -128,32 +128,33 @@ for i in range(multiplicity-1):
 
 target_chains = set(info_table[i]['chain'] for i in range(len(info_table)))
 
+center_sns = select(info_table, res_num=center_res, atom_name='CA')
+# print(f'before rotations, our center sns for each chain produced by orienting then cloning are: {center_sns}, their coordinates are {oriented[center_sns]}')
+
+oriented = oriented - symmetry_center
 for i, ch in enumerate(target_chains):
 
     same_chain_sns = select(info_table, chain=ch)
 
-    # translate to put group center point at 0,0,0
-    oriented[same_chain_sns] = oriented[same_chain_sns] - symmetry_center
-
     # find the length of the coordinate of the center atom for the chain to be
     # manipulated
-    curr_rad = oriented[select(info_table, res_num=center_res, atom_name='CA',
-                               chain=ch)].get_length()
+    curr_rad = oriented[center_sns[i]].get_length()
 
-    # find the diference between how much you want the radius to be and its
+    # find the difference between how much you want the radius to be and its
     # current value
     delta_rad = radius - curr_rad
 
     # make a vector that moves the current position so that the radius
     # from the center point will be as desired
-    delta_vect = delta_rad*oriented[select(info_table, res_num=center_res,
-                                           atom_name='CA', chain=ch)].copy().unitize()
+    delta_vect = delta_rad*oriented[center_sns[i]].copy().unitize()
 
     for sn in same_chain_sns:
         oriented[sn] = oriented[sn] + delta_vect
         oriented[sn] = oriented[sn].rotate_arround(
             2*np.pi/multiplicity*(i+1), vector(group_basis[0, :3]))
+    # print(f'now it is radius of {oriented[center_sns[i]].get_length()}')
 
-    oriented[same_chain_sns] = oriented[same_chain_sns] + symmetry_center
+oriented = oriented + symmetry_center
+
 # write_pdb(oriented, info_table, 'test_structs/test')
 write_pdb(oriented, info_table, 'test_structs/randomized_pentamer')

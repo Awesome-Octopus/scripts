@@ -258,7 +258,8 @@ def measure_dihedral(set_of_points, **kwargs):
     try:
         theta = normal_plane1.angle_between(normal_plane2)
     except ZeroDivisionError as e:
-        raise ValueError('Bad input for measuring dihedral angle. Points are not unique.') from e
+        raise ValueError(
+            'Bad input for measuring dihedral angle. Points are not unique.') from e
     # the way to determine whether this angle should be a positive or negative
     # is to see if the cross product of the plane normals is parallel or
     # anti-parallel to the axis of rotation as determined by the dot product
@@ -331,7 +332,8 @@ def get_phi_psi(coordinates, info_table, **kwargs):
                     try:
                         phi = measure_dihedral(vects, debug_mode=True)
                     except ValueError as e:
-                        print('Two neighboring atoms have the same coordinates. Inspect your input')
+                        print(
+                            'Two neighboring atoms have the same coordinates. Inspect your input')
                         raise
                     for sn in group[1:4]:
                         info_table[sn]['phi'] = phi
@@ -344,7 +346,8 @@ def get_phi_psi(coordinates, info_table, **kwargs):
                     try:
                         psi = measure_dihedral(vects)
                     except ValueError as e:
-                        print('Two neighboring atoms have the same coordinates. Inspect your input')
+                        print(
+                            'Two neighboring atoms have the same coordinates. Inspect your input')
                         raise
                     for sn in group[1:-1]:
                         info_table[sn]['psi'] = psi
@@ -801,7 +804,7 @@ def rot_sym_clash_check(coordinates, **kwargs):
             # the last ordered index must be tacked on to the last bin
 
             # if height_ndx_bins != []:
-            height_ndx_bins[-1].append(ndx_by_height[-1])
+            # height_ndx_bins[-1].append(ndx_by_height[-1])
 
             # now go divide your onion slice into onion "rings"
             angle_diffs = []
@@ -900,14 +903,25 @@ def rot_sym_clash_check(coordinates, **kwargs):
 
     angles = cylind_coords[:, 1]
 
+    # print(cylind_coords)
+    # print(np.abs(np.min(angles) + np.max(angles)))
+    # print(np.abs(np.min(cylind_coords[:, 2])))
     # for speed, it is assumed that the angles have been properly normalized
     # but if they are not this wont work. therefore checking their range
     # may be needed for debugging
-    assert np.all((angles >= -np.pi) & (angles < np.pi)), \
-        "Input angles must be in the range [-π, π)"
-    if np.abs(np.min(angles) + np.max(angles)) > 2*np.pi/multiplicity:
-        print('Clash!')
+    assert np.all((angles > -np.pi) & (angles <= np.pi)), \
+        "Input angles must be in the range (-π, π]"
+
+    # print(np.min(np.abs(cylind_coords[:, 2])))
+    if np.min(np.abs(cylind_coords[:, 2])) < cutoff_distance:
+        # print(
+        # 'the minimum of the distance of points to the rotation axis is impossibly small')
         return True
+    if np.abs(np.min(angles)) + np.abs(np.max(angles)) < 2*np.pi/multiplicity:
+        print(np.abs(np.min(angles)))
+        print(np.abs(np.max(angles)))
+        # print('the total arc spanning your input coodinates relative to the rotation center has an angle > 2*pi/multiplicity')
+        return False
 
     else:
         return onion_method()
@@ -1139,7 +1153,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
     for ndx in range(0, n_structs):
         if len(c_anchored_segments) == 0:
-            raise ValueError('currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
+            raise ValueError(
+                'currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
         for i in range(len(c_anchored_segments)):
 
             if c_anchored_segments[i] != []:
@@ -1158,15 +1173,17 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         # print(f'\n---model: {ndx} residue: {num} ', end='')
                         tries = 0
 
-                        while ((symmetry_clash(coordinates, **kwargs) or
-                               check_internal_clash(coordinates, info_table,
-                                                    cutoff_distance,
-                                                    angle_type='phi',
-                                                    anchor='C',
-                                                    res_num=num,
-                                                    chain=chainlist[i])) \
-                            and tries < max_tries):
-
+                        while (symmetry_clash(coordinates, **kwargs)  # or
+                               # while  # check_internal_clash(coordinates, info_table,
+                               # cutoff_distance,
+                               # angle_type='phi',
+                               # anchor='C',
+                               # res_num=num,
+                               # chain=chainlist[i]))
+                               and tries < max_tries):
+                            # write_pdb(coordinates, info_table,
+                            # f'test_structs/res_num_{num}_phi_')
+                            # print('there was a clash')
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='phi', anchor='C',
@@ -1176,9 +1193,11 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print('.', end='')
                             else:
-                                (f'The maximum number of attempts to '
-                                 f'unclash model number {ndx} was '
-                                 'reached. The model has been discarded.')
+                                # write_pdb(coordinates, info_table,
+                                #           'test_structs/line1194')
+                                print(f'The maximum number of attempts to '
+                                      f'unclash model number {ndx} was '
+                                      'reached. The model has been discarded.')
 
                     except ValueError:
                         print(f'Cant set phi angle for N-terminus or proline'
@@ -1193,15 +1212,16 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='C',
                                     res_num=num, chain=chainlist[i])
-                        while ((symmetry_clash(coordinates, **kwargs) or
-                                check_internal_clash(coordinates,
-                                                     info_table,
-                                                     cutoff_distance,
-                                                     angle_type='psi',
-                                                     anchor='C',
-                                                     res_num=num,
-                                                     chain=chainlist[i]))
+                        while (symmetry_clash(coordinates, **kwargs)  # or
+                                # check_internal_clash(coordinates,
+                               # info_table,
+                               # cutoff_distance,
+                               # angle_type='psi',
+                               # anchor='C',
+                               # res_num=num,
+                               # chain=chainlist[i]))
                                 and tries < max_tries):
+                            # print('there was a clash')
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='psi', anchor='C',
@@ -1210,6 +1230,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print('.', end='')
                             else:
+                                write_pdb(coordinates, info_table,
+                                          'test_structs/line1228')
                                 print(f'The maximum number of attempts to '
                                       f'unclash model number {ndx} was '
                                       'reached. The model has been discarded.')
@@ -1232,16 +1254,16 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                         # write_pdb(coordinates, info_table,
                         #           'test_structs/randomized_oriented')
                         tries = 0
-                        while (symmetry_clash(coordinates, **kwargs) or
-                              (check_internal_clash(coordinates,
-                                                    info_table,
-                                                    cutoff_distance,
-                                                    angle_type='phi',
-                                                    anchor='N',
-                                                    res_num=num,
-                                                    chain=chainlist[i]))) \
-                            and (tries < max_tries):
-                            print('there was a clash')
+                        while (symmetry_clash(coordinates, **kwargs)  # or
+                               # (check_internal_clash(coordinates,
+                               # info_table,
+                               # cutoff_distance,
+                               # angle_type='phi',
+                               # anchor='N',
+                               # res_num=num,
+                               # chain=chainlist[i])))
+                               and (tries < max_tries)):
+                            # print('there was a clash')
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='phi', anchor='N',
@@ -1266,15 +1288,16 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                                     random.uniform(0, 2*np.pi),
                                     angle_type='psi', anchor='N',
                                     res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs) or
-                               check_internal_clash(coordinates,
-                                                    info_table,
-                                                    cutoff_distance,
-                                                    angle_type='psi',
-                                                    anchor='N',
-                                                    res_num=num,
-                                                    chain=chainlist[i])
+                        while (symmetry_clash(coordinates, **kwargs) \
+                               # or check_internal_clash(coordinates,
+                               # info_table,
+                               # cutoff_distance,
+                               # angle_type='psi',
+                               # anchor='N',
+                               # res_num=num,
+                               # chain=chainlist[i])
                                 and tries < max_tries):
+                            # print('there was a clash')
                             set_phi_psi(coordinates, info_table,
                                         random.uniform(0, 2*np.pi),
                                         angle_type='psi', anchor='N',
@@ -1283,6 +1306,8 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                             if tries < max_tries:
                                 print('.', end='')
                             else:
+                                write_pdb(coordinates, info_table,
+                                          'test_structs/line1301')
                                 print(f'\nThe maximum number of attempts to '
                                       f'unclash model number {ndx} was '
                                       'reached. The model has been discarded.')

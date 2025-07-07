@@ -9,35 +9,8 @@ import numpy as np
 from vector_class import vector
 
 
-
 def change_basis(coordinates, center_v, x_prime, y_prime,
                  z_prime):
-    '''
-    given a serial number for a central atom and a serial number for an atom to
-    define a long axis, orient everything on that chain so that the vector from
-    the center atom to the axis atom alligns with the reference vector.
-    Parameters
-    ----------
-    coordinates : Array of float 64
-        the atomic coordinates of all atoms
-    info_table : list
-        list of dictionaries containing data for each coordinate
-    center_sn : int
-        serial number of the atom which is to be centered at [0 0 0]
-    allignment_sn : int
-        serial number of the atom which will define the new + z axis relative
-        to the center atom
-    reference_vect : vector
-        the axis relative to the standard basis set that you wish to align
-        the long axis to. If none given, [0 , 0, 1].
-
-
-    Returns
-    -------
-    coordinates : Array of float 64
-        The new coordinates after allignment
-
-    '''
 
     # input testing
     ref_points = [center_v, x_prime, y_prime, z_prime]
