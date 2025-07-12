@@ -77,8 +77,15 @@ symmetry_axis = group_basis[0, :3].view(vector).unitize()
 # perfect symmetry it would average to the 0 vector. So it is assigned the
 # coordinates that point from the group center towards the CENTER ATOM first subunit of
 # the group.
-radial_axis = (query_struct[query_center_sns[0]] - symmetry_center).project_onto_normal_plane(
-    symmetry_axis).unitize()
+
+if not np.allclose(query_struct[query_center_sns[0]], symmetry_center):
+    radial_axis = (query_struct[query_center_sns[0]] - symmetry_center).project_onto_normal_plane(
+        symmetry_axis).unitize()
+
+else:
+    radial_axis = query_struct[query_axis_sns[0]].project_onto_normal_plane(
+        symmetry_axis).unitize()
+
 # print(f'radial_axis: {radial_axis}')
 norm_axis = np.cross(symmetry_axis, radial_axis).view(vector)
 
@@ -110,7 +117,7 @@ oriented = orient(coordinates, center_sn, axis_sn, radial_sn, query_struct,
                   target_radial_sn=query_radial_sns[0],
                   target_axis_sn=query_axis_sns[0])
 
-# write_pdb(oriented, info_table, 'test_structs/oriented')
+write_pdb(oriented, info_table, 'test_structs/oriented')
 # print(f'chain center in main: {oriented[center_sn]}')
 # print(f'the same atom in query struct is {query_basis[0][:3,3].reshape(-1,1)}')
 randomized, info_table = random_backbone(oriented, info_table, 1,
@@ -121,7 +128,7 @@ randomized, info_table = random_backbone(oriented, info_table, 1,
                                          symmetry_center=symmetry_center,
                                          multiplicity=multiplicity,
                                          cutoff_distance=0.36)
-
+write_pdb(randomized, info_table, 'test_structs/randomized')
 # make n-1 new identical chains of your oriented chain
 for i in range(multiplicity-1):
     oriented, info_table, _ = clone_chain(oriented, info_table, [chain])

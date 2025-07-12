@@ -646,287 +646,6 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     info_table[s]['omega'] = measure_dihedral(vects)
 
 
-def is_clashing(coordinates, search_set_indices, threshold):
-    '''
-    given 2 lists of serial numbers, return true if any pairwise combination
-    of points from coordinates associated with a serial number in A is closer
-    than threshold from any coordinate indicated by a serial number in list b
-
-    Parameters
-    ----------
-    coordinates : vector
-        all coordinates
-    search_set_indices : list of lists of integers
-        list containing exactly 2 lists each of which contains serial numbers.
-    threshold : float64
-        value below which to halt the process and report a clash.
-
-    Returns
-    -------
-    bool
-        if a clash was detected.
-
-    if debug mode is true distances is where the measured distances
-    will be recorded. Otherwise, only return true false
-
-
-    '''
-
-    # !!! in the future try to convert this to a heuristic kdtree algorithm
-    # which is much faster but difficult to understand and implement.
-    # right now it is brute force and ~100x slower than it could be.
-
-    # unpack the input lists
-    set_a, set_b = search_set_indices
-
-    pairs = [[a, b] for a in set_a for b in set_b]
-    for pair in pairs:
-
-        if (coordinates[pair[1]] -
-                coordinates[pair[0]]).get_length() < threshold:
-            return True
-    return False
-
-
-# !!! in the future, I would like to change this to just take an atom
-# serial number to allow it to be more generalizable, to check all serial
-# number on one side of the atom against all others on the other side,but
-# for now it needs to fit into existing code.
-
-def check_internal_clash(coordinates, info_table, cutoff_distance, angle_type,
-                         anchor, **kwargs):
-
-    if angle_type == 'phi':
-        # get the index of the nitro of the current res
-        kwargs['atom_name'] = 'N'
-        atom_sn = select(info_table, **kwargs)
-        if len(atom_sn) > 1:
-            raise ValueError('no more than 1 atom can be specified for segment'
-                             'isolation')
-    elif angle_type == 'psi':
-        # get the index of the carbonyl of the current res
-        kwargs['atom_name'] = 'C'
-        atom_sn = select(info_table, **kwargs)
-
-    # get the sets of serial numbers on the same chain on each side of
-    # a given atom. Note that the atom must be a carbonyl or amide nitrogen
-    set_a = isolate_segment(info_table, atom_sn[0])
-
-    set_b = isolate_segment(info_table, atom_sn[0], anchor='C')
-
-    if is_clashing(coordinates, [set_a, set_b], cutoff_distance):
-        return True
-    return False
-
-
-def rot_sym_clash_check(coordinates, **kwargs):
-    '''
-    Checks if a given set of coordinates can produce radial symmetry arround
-    the center vector, when multiplicity copies are arranged along the rot_ax.
-
-    Parameters
-    ----------
-    coordinates : Array of vector
-        a SUBSET of the total set of coordinates, which is the group
-        of molecules to be considered for symmetry testing. coordinates should
-        be in the standard cartesian basis.
-    multiplicity : Int
-        An integer 2 or greater that indicates the number of symmetrical units.
-    symmetry_center : vector
-        center of symmetry for the multimer to be tested. This should
-        generally be outside the bounding volume of the molecule, and in
-        standard cartesian basis.
-    radial_v :vector
-        radial axis. should be orthogonal to rot_ax, and in
-        standard cartesian basis.
-    rot_ax : vector
-        The axis arround which rotational symmetry of the moleule will be
-        tested.
-    cutoff_distance : float
-        the distance threshold below which is considered a clash.
-
-    Returns
-    -------
-    clash : boolean
-        True if arranging n copies symmetrically arround the center of rotation
-        would result in a clash, otherwise false
-
-    '''
-    multiplicity = kwargs.get('multiplicity', None)
-    radial_v = kwargs.get('radial_v', None)
-    rot_ax = kwargs.get('axis_vector', None)
-    radius = kwargs.get('radius', None)
-    n_slices = kwargs.get('n_slices', 20)
-    n_rings = kwargs.get('n_rings', 20)
-    cutoff_distance = kwargs.get('cutoff_distance', 0.36)
-    symmetry_center = kwargs.get('symmetry_center', None)
-    # print(f'symmetry_center: {kwargs["symmetry_center"]}')
-
-    def onion_method():
-        # print('--------------------------------------')
-        # get the highest and lowest values of theta
-        # an easy hueristic is that if the angle needed to contain
-        # all the point of a monomer in an arc arround the center
-        # is less than 2 pi / n, then that monomer can have n fold
-        # radial symmetry without clashes between subunits
-
-        threshold = 2*np.pi/multiplicity
-
-        # if any points lie arbitrarily close to the rotation axis then it is
-        # a clash check for these first
-        if np.any(np.isclose(cylind_coords[:, 2], 0.0)):
-
-            return True
-
-        else:
-            # sort cylindrical coordinates by z and bin them
-            # find the range for each bin
-            ndx_by_height = np.argsort(cylind_coords[:, 0])
-            min_z = cylind_coords[ndx_by_height[0]][0]
-            max_z = cylind_coords[ndx_by_height[-1]][0]
-
-            dz = (max_z - min_z)/n_slices
-
-            height_ndx_bins = []
-            numel = len(ndx_by_height)
-            k = 0
-            for i in range(n_slices):
-                height_ndx_bins.append([])
-                low_limit = min_z + i*dz
-                high_limit = low_limit + dz
-                while k < numel and cylind_coords[ndx_by_height[k]][0] \
-                    >= low_limit and cylind_coords[ndx_by_height[k]][0] \
-                        < high_limit:
-
-                    height_ndx_bins[i].append(ndx_by_height[k])
-                    k += 1
-            # because it is strictly less than the high limit,
-            # the last ordered index must be tacked on to the last bin
-
-            # if height_ndx_bins != []:
-            # height_ndx_bins[-1].append(ndx_by_height[-1])
-
-            # now go divide your onion slice into onion "rings"
-            angle_diffs = []
-            for i in range(n_rings):
-
-                # the indices in current slice
-                curr_slice = height_ndx_bins[i].copy()
-                # if one or fewer points in a slice, you cant
-                # find an angle, but we know it will not
-                # cause a clash, so skip it.
-                if len(curr_slice) > 1:
-                    # the actual coordinates of those
-                    slice_coords = [cylind_coords[q] for
-                                    q in curr_slice]
-                    slice_coords = np.asarray(slice_coords)
-
-                    # the indices of the indices in the slice sorted by radius
-                    ndx_by_rad = np.argsort(slice_coords[:, 2])
-
-                    numel = len(ndx_by_rad)
-
-                    min_r = slice_coords[ndx_by_rad[0]][2]
-                    max_r = slice_coords[ndx_by_rad[-1]][2]
-
-                    dr = (max_r - min_r)/n_rings
-
-                    rad_ndx_bins = []
-                    k = 0
-                    for j in range(n_rings):
-                        rad_ndx_bins.append([])
-                        low_limit = min_r + j*dr
-                        high_limit = low_limit + dr
-
-                        while k < numel and slice_coords[ndx_by_rad[k]][2] \
-                            >= low_limit and slice_coords[ndx_by_rad[k]][2] \
-                                < high_limit:
-                            rad_ndx_bins[j].append(ndx_by_rad[k])
-                            k += 1
-                    rad_ndx_bins[-1].append(ndx_by_rad[-1])
-
-                    # now go through each onion ring and if there is more than 1
-                    # index, check if their angles indicate they would clash with
-                    # another multimer
-
-                    for j in range(n_rings):
-                        # if there are 2 or more get all pairs of indices
-                        if len(rad_ndx_bins[j]) > 1:
-                            index_pairs = itertools.combinations(
-                                rad_ndx_bins[j], 2)
-                            # if the difference in angle between any 2 points
-                            # on the same ring is over 2pi/multiplicity,
-                            # there is a clash
-                            for ndx_a, ndx_b in index_pairs:
-                                ang_a = slice_coords[ndx_a][1]
-                                ang_b = slice_coords[ndx_b][1]
-                                diff = convert_angle(ang_a - ang_b)
-
-                                angle_diffs.append(diff)
-
-                                if diff <= -np.pi/multiplicity/2 or diff \
-                                        >= np.pi/multiplicity/2:
-                                    # print('sssss')
-                                    return True
-                                else:
-                                    pass
-                                    # print('hooray, much winner is you!')
-                    height_ndx_bins[i] = rad_ndx_bins
-
-        # if the function got this far there is no clash
-        return False
-
-    # copy subset of coordinates and recenter on center_v
-    cylind_coords = coordinates.copy()
-    # cylind_coords -= symmetry_center
-    # print(kwargs)
-    if rot_ax is None:
-        raise ValueError(
-            'To evaluate clashes between radially symmetric subunits, an axis of symmetry must be provided')
-    if not rot_ax.is_nonzero():
-        raise ValueError('The axis of rotation cannot be the zero vector')
-    if radial_v is None:
-        raise ValueError(
-            'To evaluate clashes between radially symmetric subunits, a radial axis must be provided')
-    if not radial_v.is_nonzero():
-        raise ValueError('The radial axis cannot be the zero vector')
-
-    # convert to cylindrical coordinates, and change basis so that rot_ax is
-    # directly along the cylindrical axis, and all angles are relative to
-    # radial_v
-    cylind_coords = cart2cylind(
-        cylind_coords, symmetry_center, rot_ax, radial_v)
-
-    # if the smallest angle needed to contain all points in the chain within
-    # the arc of a circle arround the symmetry center is larger than 1/n th
-    # of a full circle, it will not have n fold radial symmetry without a clash
-
-    angles = cylind_coords[:, 1]
-
-    # print(cylind_coords)
-    # print(np.abs(np.min(angles) + np.max(angles)))
-    # print(np.abs(np.min(cylind_coords[:, 2])))
-    # for speed, it is assumed that the angles have been properly normalized
-    # but if they are not this wont work. therefore checking their range
-    # may be needed for debugging
-    assert np.all((angles > -np.pi) & (angles <= np.pi)), \
-        "Input angles must be in the range (-π, π]"
-
-    # print(np.min(np.abs(cylind_coords[:, 2])))
-    if np.min(np.abs(cylind_coords[:, 2])) < cutoff_distance:
-        # print(
-        # 'the minimum of the distance of points to the rotation axis is impossibly small')
-        return True
-    if np.abs(np.min(angles)) + np.abs(np.max(angles)) < 2*np.pi/multiplicity:
-        print(np.abs(np.min(angles)))
-        print(np.abs(np.max(angles)))
-        # print('the total arc spanning your input coodinates relative to the rotation center has an angle > 2*pi/multiplicity')
-        return False
-
-    else:
-        return onion_method()
-
-
 def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                     **kwargs):
 
@@ -992,14 +711,6 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
         debug_out = np.vstack(
             (coordinates[center_sn], kwargs['symmetry_center'], q))
         # write_pdb(debug_out, info_table[:3], 'test_structs/test_basis')
-
-        def symmetry_clash(coordinates, **kwargs):
-            return rot_sym_clash_check(coordinates, **kwargs)
-    else:
-        # if symmetry is not to be considered just return false
-
-        def symmetry_clash(coordinates):
-            return False
 
     for ndx, line in enumerate(residue_list):
         residue_list[ndx] = line.strip()
@@ -1157,167 +868,50 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                 'currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
         for i in range(len(c_anchored_segments)):
 
-            if c_anchored_segments[i] != []:
+            for seg in (c_anchored_segments, n_anchored_segments):
+                if seg[i] != []:
 
-                for num in c_anchored_segments[i]:
-                    # print(f'were working on the c anchored residue {num}')
-                    try:
-                        # print(f'on the phi bond')
-                        set_phi_psi(coordinates, info_table,
-                                    random.uniform(0, 2*np.pi),
-                                    angle_type='phi', anchor='C', res_num=num,
-                                    chain=chainlist[i])
+                    for num in seg[i]:
+                        # print(f'were working on the c anchored residue {num}')
 
-                        # if your backbone adjustment resulted in a clash,
-                        # retry with a different random angle
-                        # print(f'\n---model: {ndx} residue: {num} ', end='')
-                        tries = 0
+                        for angle_type in ('phi', 'psi'):
 
-                        while (symmetry_clash(coordinates, **kwargs)  # or
-                               # while  # check_internal_clash(coordinates, info_table,
-                               # cutoff_distance,
-                               # angle_type='phi',
-                               # anchor='C',
-                               # res_num=num,
-                               # chain=chainlist[i]))
-                               and tries < max_tries):
-                            # write_pdb(coordinates, info_table,
-                            # f'test_structs/res_num_{num}_phi_')
-                            # print('there was a clash')
-                            set_phi_psi(coordinates, info_table,
-                                        random.uniform(0, 2*np.pi),
-                                        angle_type='phi', anchor='C',
-                                        res_num=num, chain=chainlist[i])
+                            for anchor in ('C', 'N'):
+                                try:
+                                    # print(f'on the phi bond')
+                                    set_phi_psi(coordinates, info_table,
+                                                random.uniform(0, 2*np.pi),
+                                                angle_type=angle_type, anchor=anchor,
+                                                res_num=num,
+                                                chain=chainlist[i])
 
-                            tries += 1
-                            if tries < max_tries:
-                                print('.', end='')
-                            else:
-                                # write_pdb(coordinates, info_table,
-                                #           'test_structs/line1194')
-                                print(f'The maximum number of attempts to '
-                                      f'unclash model number {ndx} was '
-                                      'reached. The model has been discarded.')
+                                    # if your backbone adjustment resulted in a clash,
+                                    # retry with a different random angle
+                                    print(
+                                        f'\n---model: {ndx} residue: {num} ', end='')
+                                    tries = 0
 
-                    except ValueError:
-                        print(f'Cant set phi angle for N-terminus or proline'
-                              f' at residue {num} of model number {ndx}. '
-                              'Skipping this residue')
-                        pass
-                    try:
-                        # print(f'\n---model: {ndx} residue: {num} ', end='')
-                        # print('on the psi bond')
-                        tries = 0
-                        set_phi_psi(coordinates, info_table,
-                                    random.uniform(0, 2*np.pi),
-                                    angle_type='psi', anchor='C',
-                                    res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs)  # or
-                                # check_internal_clash(coordinates,
-                               # info_table,
-                               # cutoff_distance,
-                               # angle_type='psi',
-                               # anchor='C',
-                               # res_num=num,
-                               # chain=chainlist[i]))
-                                and tries < max_tries):
-                            # print('there was a clash')
-                            set_phi_psi(coordinates, info_table,
-                                        random.uniform(0, 2*np.pi),
-                                        angle_type='psi', anchor='C',
-                                        res_num=num, chain=chainlist[i])
-                            tries += 1
-                            if tries < max_tries:
-                                print('.', end='')
-                            else:
-                                write_pdb(coordinates, info_table,
-                                          'test_structs/line1228')
-                                print(f'The maximum number of attempts to '
-                                      f'unclash model number {ndx} was '
-                                      'reached. The model has been discarded.')
-                    except ValueError:
-                        print(f'Cant set psi for C terminus at residue {num} '
-                              f'of model number {ndx}. Skipping this residue.')
-                        pass
-            if n_anchored_segments[i] != []:
-                for num in n_anchored_segments[i]:
-                    # print(f'were working on the n anchored residue {num}')
-                    try:
-                        # print('on the phi bond')
-                        set_phi_psi(coordinates, info_table,
-                                    random.uniform(0, 2*np.pi),
-                                    angle_type='phi', anchor='N',
-                                    res_num=num, chain=chainlist[i])
-                        print(f'\n---model: {ndx} residue: {num} ', end='')
-                        # if your backbone adjustment resulted in a clash, retry
-                        # with a different random angle
-                        # write_pdb(coordinates, info_table,
-                        #           'test_structs/randomized_oriented')
-                        tries = 0
-                        while (symmetry_clash(coordinates, **kwargs)  # or
-                               # (check_internal_clash(coordinates,
-                               # info_table,
-                               # cutoff_distance,
-                               # angle_type='phi',
-                               # anchor='N',
-                               # res_num=num,
-                               # chain=chainlist[i])))
-                               and (tries < max_tries)):
-                            # print('there was a clash')
-                            set_phi_psi(coordinates, info_table,
-                                        random.uniform(0, 2*np.pi),
-                                        angle_type='phi', anchor='N',
-                                        res_num=num, chain=chainlist[i])
+                                    while  # we dectect a clash
 
-                            tries += 1
-                            if tries < max_tries:
-                                print('.', end='')
-                            else:
-                                print(f'\nThe maximum number of attempts to '
-                                      f'unclash model number {ndx} was '
-                                      'reached. The model has been discarded.')
-                    except ValueError:
-                        print(f'Cant set phi angle for N-terminus or proline '
-                              f'at residue {num} of model number {ndx}. '
-                              'Skipping this residue.')
-                        pass
-                    try:
-                        tries = 0
-                        # print('on the psi bond')
-                        set_phi_psi(coordinates, info_table,
-                                    random.uniform(0, 2*np.pi),
-                                    angle_type='psi', anchor='N',
-                                    res_num=num, chain=chainlist[i])
-                        while (symmetry_clash(coordinates, **kwargs) \
-                               # or check_internal_clash(coordinates,
-                               # info_table,
-                               # cutoff_distance,
-                               # angle_type='psi',
-                               # anchor='N',
-                               # res_num=num,
-                               # chain=chainlist[i])
-                                and tries < max_tries):
-                            # print('there was a clash')
-                            set_phi_psi(coordinates, info_table,
-                                        random.uniform(0, 2*np.pi),
-                                        angle_type='psi', anchor='N',
-                                        res_num=num, chain=chainlist[i])
-                            tries += 1
-                            if tries < max_tries:
-                                print('.', end='')
-                            else:
-                                write_pdb(coordinates, info_table,
-                                          'test_structs/line1301')
-                                print(f'\nThe maximum number of attempts to '
-                                      f'unclash model number {ndx} was '
-                                      'reached. The model has been discarded.')
-                    except ValueError:
-                        print(f'Cant set phi for C terminus at residue {num} '
-                              f'of model number {ndx}. Skipping this residue')
-                        pass
-            if free_residues != []:
-                pass
-    return coordinates, info_table
+                                    set_phi_psi(coordinates, info_table,
+                                                random.uniform(0, 2*np.pi),
+                                                angle_type=angle_type, anchor=anchor,
+                                                res_num=num, chain=chainlist[i])
+
+                                    tries += 1
+                                    if tries < max_tries:
+                                        print('.', end='')
+                                    else:
+                                        # write_pdb(coordinates, info_table,
+                                        #           'test_structs/line1194')
+                                        print(f'The maximum number of attempts to '
+                                              f'unclash model number {ndx} was '
+                                              'reached. The model has been discarded.')
+
+                                except ValueError:
+                                    print(f'Cant set phi angle for N-terminus or proline'
+                                          f' at residue {num} of model number {ndx}. '
+                                          'Skipping this residue')
 
 
 def get_rot_mat(A, B):
