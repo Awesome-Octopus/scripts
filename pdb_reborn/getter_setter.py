@@ -16,6 +16,7 @@ import math
 from io_funcs import import_pdb, plot_model, write_pdb
 from coord_funcs import cart2cylind, convert_angle
 from vector_class import vector
+from scipy.spatial import cKDTree
 
 
 def select(info_table, **kwargs):
@@ -463,29 +464,6 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
     # if they aren't the complete model needs to be built. However checking
     # for this every time would be a major drain on computation time.
 
-    # !!!!!!!!!!!!!!!  CURRENTLY UNUSED !!!!!!!!!!!!!!!!!!!!!!!
-    def same_residue(info_table, ser_num):
-        # given a serial number, return all serial numbers on the same
-        # residue and the same chain
-        res = info_table[ser_num]['res_num']
-        chain = info_table[ser_num]['chain']
-        mod = info_table[ser_num]['model_name']
-        smod = info_table[ser_num]['submodel']
-
-        # this will take advantage of the fact that the serial numbers
-        # should always be in the order N, CA, C, O, then the rest
-        same_res = select(info_table, res_num=res, chain=chain, model_name=mod,
-                          submodel=smod)
-
-        n = (info_table[sn]['ser_num'] for sn in same_res if
-             info_table[sn]['atom_name'] == 'N')
-        ca = (info_table[sn]['ser_num'] for sn in same_res if
-              info_table[sn]['atom_name'] == 'CA')
-        c = (info_table[sn]['ser_num'] for sn in same_res if
-             info_table[sn]['atom_name'] == 'C')
-
-        return None
-
     def find_rotation_angle(target_angle, ser_num):
         # given the residue pointed to by the ca_ser_num, and the desired
         # angle type, look up that angle, or call get_phi_psi if needed
@@ -559,7 +537,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     # applied to them
                     rotation_segment = isolate_segment(
                         info_table, bb_sn[1], anchor)
-
+                    print('rotation sement for', rotation_segment)
                     rot_ang = find_rotation_angle(angle, bb_sn[2])
                     for ser_num in rotation_segment:
                         coordinates[ser_num] -= center
@@ -568,7 +546,9 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                             rot_ang, -amide)
 
                         coordinates[ser_num] += center
-
+                        print(ser_num)
+                        # write_pdb(coordinates, info_table,
+                        #           f'test_structs/{ser_num}')
             if bb_sn[4] is not None and angle_type == 'psi':
                 # if we specified psi and there an amide at N +1 (ie not c term)
                 center = coordinates[bb_sn[2]].copy()
@@ -646,41 +626,20 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     info_table[s]['omega'] = measure_dihedral(vects)
 
 
-def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
+def find_clash(coords, threshold):
+
+    tree = cKDTree(coords)
+    return tree.query_pairs(threshold)
+
+
+def random_backbone(coordinates, info_table, residue_list_filename,
                     **kwargs):
 
     f = open(residue_list_filename, 'r')
     residue_list = f.readlines()
-    axis_vector = kwargs.get('axis_vector', None)
-    radial_v = kwargs.get('radial_v', None)
     cutoff_distance = kwargs.get('cutoff_distance', 0.36)
     chainlist = kwargs.get('chainlist', None)
     max_tries = kwargs.get('max_tries', 20)
-    center_sn = kwargs.get('center_sn', None)
-    radial_sn = kwargs.get('radial_sn', None)
-
-    symmetry_groups = kwargs.get('symmetry_groups', 'all')
-    radius = kwargs.get('radius', None)
-    multiplicity = kwargs.get('multiplicity', None)
-
-    if center_sn is None or radial_sn is None:
-        raise ValueError('rotational symmetry clash check requires the '
-                         'additional parameters center_sn and radial_sn as kwargs')
-
-    # !!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # change it to accept input file format that include the chain along with
-    # the residue designations for fixed and anchored residues, so that it can
-    # be determined which ones are symmetrically related to which. This will
-    # allow heterogenous set of chains while still allowing for assumptions
-    # about symmetry to be used to simplify clash checking.
-    # !!!
-
-    # symmetry_groups will be a list of lists each containing Chain letters of
-    # chains which are related to each other by symmetry this will be used to
-    # expedite clash checking. if none are given, all chains will be treated
-    # as identical in sequence qand related by symmetry together in one
-    # symmetry group, else if the value None is passed, or an empty list is
-    # passed, they will all be treated as different
 
     # residue numbers after the header 'anchored:' in the residue file will
     # be put in a separate list, these residues cannot move at all
@@ -693,25 +652,6 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
 
     # trim off the newline and convert to integer for the imported residue
     # numbers whose backbones you wish to randomize
-
-    # if your randomized backbone needs to consider self-symmetry in its clash
-    # evaluation additional parameters are needed for the hueristic clash check
-    # which should be passed as a list.
-
-    # print(f'the kwargs are:\n\n\n\{kwargs}\n\n\n\n\n')
-    if center_sn is not None and radial_v is not None:
-
-        # DEBUG BLOCK
-        # print(f'radial_v: {kwargs["radial_v"]}')
-        # print(f'center_sn: {kwargs["center_sn"]}')
-        # print(f'chain center {coordinates[kwargs["center_sn"]]}')
-        # print(f'radius: {kwargs["radius"]}')
-        # print(f'symmetry_center: {kwargs["symmetry_center"]}')
-        q = coordinates[center_sn] + axis_vector
-        debug_out = np.vstack(
-            (coordinates[center_sn], kwargs['symmetry_center'], q))
-        # write_pdb(debug_out, info_table[:3], 'test_structs/test_basis')
-
     for ndx, line in enumerate(residue_list):
         residue_list[ndx] = line.strip()
 
@@ -860,58 +800,58 @@ def random_backbone(coordinates, info_table, n_structs, residue_list_filename,
                          'n_anchored_segments and the number of items in '
                          'chainlist must all be equal')
 
-    # loop the generation for each of the n_structs you want to generate
+    if len(c_anchored_segments) == 0:
+        raise ValueError(
+            'currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
 
-    for ndx in range(0, n_structs):
-        if len(c_anchored_segments) == 0:
-            raise ValueError(
-                'currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
-        for i in range(len(c_anchored_segments)):
+    for i, g in enumerate([c_anchored_segments, n_anchored_segments]):
 
-            for seg in (c_anchored_segments, n_anchored_segments):
-                if seg[i] != []:
+        if i == 0:
+            anchor = 'C'
+        else:
+            anchor = 'N'
 
-                    for num in seg[i]:
-                        # print(f'were working on the c anchored residue {num}')
+        for seg in g:
+            if seg != []:
+                # print(seg)
+                for num in seg:
+                    # print(num)
+                    for angle_type in ('phi', 'psi'):
+                        # print(angle_type)
+                        try:
 
-                        for angle_type in ('phi', 'psi'):
+                            x = random.uniform(0, 2*np.pi)
+                            for ch in chainlist:
+                                # print(ch)
+                                # print(select(info_table, res_num=num, chain=ch))
+                                set_phi_psi(coordinates, info_table, x,
+                                            angle_type=angle_type, anchor=anchor,
+                                            res_num=num, chain=ch)
+                                # write_pdb(coordinates, info_table,
+                                #           f'test_structs/{ch}_{num}_{angle_type}_{anchor}')
 
-                            for anchor in ('C', 'N'):
-                                try:
-                                    # print(f'on the phi bond')
-                                    set_phi_psi(coordinates, info_table,
-                                                random.uniform(0, 2*np.pi),
-                                                angle_type=angle_type, anchor=anchor,
-                                                res_num=num,
-                                                chain=chainlist[i])
+                            tries = 0
 
-                                    # if your backbone adjustment resulted in a clash,
-                                    # retry with a different random angle
-                                    print(
-                                        f'\n---model: {ndx} residue: {num} ', end='')
-                                    tries = 0
+                            # while find_clash(coordinates,
+                            #                  cutoff_distance) != set():
+                            #     x = random.uniform(0, 2*np.pi)
+                            #     for ch in chainlist:
+                            #         set_phi_psi(coordinates, info_table, x,
+                            #                     angle_type=angle_type, anchor=anchor,
+                            #                     res_num=num, chain=ch)
+                            #         # write_pdb(coordinates, info_table,
+                            #         #           f'test_structs/{ch}_{num}_{angle_type}_{anchor}_retry_number_')
 
-                                    while  # we dectect a clash
+                            #     print('clash detected at ', find_clash(
+                            #         coordinates, cutoff_distance))
+                            #     tries += 1
 
-                                    set_phi_psi(coordinates, info_table,
-                                                random.uniform(0, 2*np.pi),
-                                                angle_type=angle_type, anchor=anchor,
-                                                res_num=num, chain=chainlist[i])
+                        except ValueError:
+                            print(f'Cant set phi angle for N-terminus or proline'
+                                  f' at residue {num} of model number {ndx}. '
+                                  'Skipping this residue')
 
-                                    tries += 1
-                                    if tries < max_tries:
-                                        print('.', end='')
-                                    else:
-                                        # write_pdb(coordinates, info_table,
-                                        #           'test_structs/line1194')
-                                        print(f'The maximum number of attempts to '
-                                              f'unclash model number {ndx} was '
-                                              'reached. The model has been discarded.')
-
-                                except ValueError:
-                                    print(f'Cant set phi angle for N-terminus or proline'
-                                          f' at residue {num} of model number {ndx}. '
-                                          'Skipping this residue')
+    return (coordinates, info_table)
 
 
 def get_rot_mat(A, B):

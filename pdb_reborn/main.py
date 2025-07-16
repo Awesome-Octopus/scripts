@@ -46,7 +46,7 @@ query_chains = list(set(query_table[i]['chain']
 
 # CHANGE THIS TO CHANGE FROM A PENTAMER TO ANOTHER NUMBER IF DESIRED
 # multiplicity = len(query_chains)
-multiplicity = 20
+multiplicity = 2
 
 query_basis = []
 
@@ -102,14 +102,10 @@ query_radius = query_radius/len(query_chains)
 radius = query_radius
 # print(f'radius: {radius}')
 
-# --------------DEBUG BLOCK--------------
-# b = symmetry_center + symmetry_axis
-# c = symmetry_center + radial_axis*radius
-# out = np.vstack((symmetry_center, b, c))
-# write_pdb(out, info_table[:3], 'test_structs/group_basis')
-
 local_basis_for_query = np.vstack(
-    (query_basis[0][:3, 3].T, query_basis[0][0, :3]+query_basis[0][:3, 3].T, query_basis[0][1, :3] + query_basis[0][:3, 3].T, query_basis[0][2, :3] + query_basis[0][:3, 3].T))
+    (query_basis[0][:3, 3].T, query_basis[0][0, :3]+query_basis[0][:3, 3].T,
+     query_basis[0][1, :3] + query_basis[0][:3, 3].T,
+     query_basis[0][2, :3] + query_basis[0][:3, 3].T))
 # write_pdb(local_basis_for_query, info_table[:4], 'test_structs/query_basis')
 
 oriented = orient(coordinates, center_sn, axis_sn, radial_sn, query_struct,
@@ -117,24 +113,12 @@ oriented = orient(coordinates, center_sn, axis_sn, radial_sn, query_struct,
                   target_radial_sn=query_radial_sns[0],
                   target_axis_sn=query_axis_sns[0])
 
-write_pdb(oriented, info_table, 'test_structs/oriented')
-# print(f'chain center in main: {oriented[center_sn]}')
-# print(f'the same atom in query struct is {query_basis[0][:3,3].reshape(-1,1)}')
-randomized, info_table = random_backbone(oriented, info_table, 1,
-                                         'test_residues.txt', chain_list=query_chains[0],
-                                         center_sn=center_sn, radius=radius,
-                                         radial_sn=radial_sn, radial_v=radial_axis,
-                                         axis_vector=symmetry_axis,
-                                         symmetry_center=symmetry_center,
-                                         multiplicity=multiplicity,
-                                         cutoff_distance=0.36)
-write_pdb(randomized, info_table, 'test_structs/randomized')
 # make n-1 new identical chains of your oriented chain
 for i in range(multiplicity-1):
     oriented, info_table, _ = clone_chain(oriented, info_table, [chain])
 
-target_chains = set(info_table[i]['chain'] for i in range(len(info_table)))
 
+target_chains = set(info_table[i]['chain'] for i in range(len(info_table)))
 center_sns = select(info_table, res_num=center_res, atom_name='CA')
 # print(f'before rotations, our center sns for each chain produced by orienting then cloning are: {center_sns}, their coordinates are {oriented[center_sns]}')
 
@@ -162,6 +146,9 @@ for i, ch in enumerate(target_chains):
     # print(f'now it is radius of {oriented[center_sns[i]].get_length()}')
 
 oriented = oriented + symmetry_center
+# write_pdb(oriented, info_table, 'test_structs/149')
 
-# write_pdb(oriented, info_table, 'test_structs/test')
-write_pdb(oriented, info_table, 'test_structs/randomized_pentamer')
+randomized, info_table = random_backbone(oriented, info_table, 'test_residues.txt',
+                                         cutoff_distance=0.36)
+
+# write_pdb(randomized, info_table, 'test_structs/randomized')
