@@ -537,7 +537,7 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                     # applied to them
                     rotation_segment = isolate_segment(
                         info_table, bb_sn[1], anchor)
-                    print('rotation sement for', rotation_segment)
+
                     rot_ang = find_rotation_angle(angle, bb_sn[2])
                     for ser_num in rotation_segment:
                         coordinates[ser_num] -= center
@@ -546,7 +546,6 @@ def set_phi_psi(coordinates, info_table, angle, angle_type='phi', anchor='N',
                             rot_ang, -amide)
 
                         coordinates[ser_num] += center
-                        print(ser_num)
                         # write_pdb(coordinates, info_table,
                         #           f'test_structs/{ser_num}')
             if bb_sn[4] is not None and angle_type == 'psi':
@@ -813,38 +812,33 @@ def random_backbone(coordinates, info_table, residue_list_filename,
 
         for seg in g:
             if seg != []:
-                # print(seg)
+
                 for num in seg:
-                    # print(num)
+
                     for angle_type in ('phi', 'psi'):
-                        # print(angle_type)
+
                         try:
 
                             x = random.uniform(0, 2*np.pi)
                             for ch in chainlist:
-                                # print(ch)
-                                # print(select(info_table, res_num=num, chain=ch))
+
                                 set_phi_psi(coordinates, info_table, x,
                                             angle_type=angle_type, anchor=anchor,
                                             res_num=num, chain=ch)
-                                # write_pdb(coordinates, info_table,
-                                #           f'test_structs/{ch}_{num}_{angle_type}_{anchor}')
 
                             tries = 0
 
-                            # while find_clash(coordinates,
-                            #                  cutoff_distance) != set():
-                            #     x = random.uniform(0, 2*np.pi)
-                            #     for ch in chainlist:
-                            #         set_phi_psi(coordinates, info_table, x,
-                            #                     angle_type=angle_type, anchor=anchor,
-                            #                     res_num=num, chain=ch)
-                            #         # write_pdb(coordinates, info_table,
-                            #         #           f'test_structs/{ch}_{num}_{angle_type}_{anchor}_retry_number_')
+                            while find_clash(coordinates,
+                                             cutoff_distance) != set():
+                                x = random.uniform(0, 2*np.pi)
+                                for ch in chainlist:
+                                    set_phi_psi(coordinates, info_table, x,
+                                                angle_type=angle_type, anchor=anchor,
+                                                res_num=num, chain=ch)
 
-                            #     print('clash detected at ', find_clash(
-                            #         coordinates, cutoff_distance))
-                            #     tries += 1
+                                print('clash detected at ', find_clash(
+                                    coordinates, cutoff_distance))
+                                tries += 1
 
                         except ValueError:
                             print(f'Cant set phi angle for N-terminus or proline'
