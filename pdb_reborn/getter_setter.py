@@ -631,9 +631,49 @@ def find_clash(coords, threshold):
     return tree.query_pairs(threshold)
 
 
+def first_order_clash(coords, info_table, threshold, atom_names):
+    """
+Check for first-order steric clashes among specified backbone atoms.
+
+This function iterates over a list of atom names (e.g., ['N', 'CA', 'C']) 
+and checks if any pair of atoms with the same name are closer than the 
+specified threshold distance. It is intended as a fast, heuristic check 
+to reject grossly clashing structures without requiring full bonding 
+topology.
+
+Parameters
+----------
+coords : np.ndarray
+    An (N, 3) array of atomic coordinates, where N is the total number of atoms.
+info_table : dict
+    A dictionary with per-atom metadata. Must include an 'atom_name' field
+    used to select atoms by name.
+threshold : float
+    Minimum allowed distance between any two atoms of the same specified type.
+atom_names : list of str
+    List of atom names (e.g., ['N', 'CA']) to evaluate for steric overlap.
+
+Returns
+-------
+bool
+    True if a clash is detected (i.e., any atom pair is closer than the threshold),
+    False otherwise.
+"""
+    for name in atom_names:
+
+        entries = select(info_table, atom_name=name)
+        # print(len(coords), len(info_table))
+        # print(coords[entries])
+
+        clashes = find_clash(coords[entries], threshold)
+        if clashes:
+            return True
+    return False
+
+
 def random_backbone(coordinates, info_table, residue_list_filename,
                     **kwargs):
-
+    print('test')
     f = open(residue_list_filename, 'r')
     residue_list = f.readlines()
     cutoff_distance = kwargs.get('cutoff_distance', 0.36)
@@ -803,6 +843,10 @@ def random_backbone(coordinates, info_table, residue_list_filename,
         raise ValueError(
             'currently there is no implementation for when there are no anchored residues. anchor at least 1 in your text file.')
 
+    # a list of all unique atoms names eg: ['CA', 'CB', 'N' ...] found among all residues
+    # atom_names = list(set(entry['atom_name'] for entry in info_table))
+    # atom_names = ['CA']
+
     for i, g in enumerate([c_anchored_segments, n_anchored_segments]):
 
         if i == 0:
@@ -828,16 +872,16 @@ def random_backbone(coordinates, info_table, residue_list_filename,
 
                             tries = 0
 
-                            while find_clash(coordinates,
-                                             cutoff_distance) != set():
+                            # while first_order_clash(coordinates, info_table, cutoff_distance, atom_names):
+                            while find_clash(coordinates, cutoff_distance):
                                 x = random.uniform(0, 2*np.pi)
                                 for ch in chainlist:
                                     set_phi_psi(coordinates, info_table, x,
                                                 angle_type=angle_type, anchor=anchor,
                                                 res_num=num, chain=ch)
 
-                                print('clash detected at ', find_clash(
-                                    coordinates, cutoff_distance))
+                                # print('clash detected at ', find_clash(
+                                #     coordinates, cutoff_distance))
                                 tries += 1
 
                         except ValueError:

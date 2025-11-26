@@ -13,20 +13,20 @@ from matplotlib import pyplot as plt
 from vector_class import vector
 from io_funcs import import_pdb, plot_model, write_pdb
 from coord_funcs import cart2cylind, cylind2cart, change_basis, convert_angle
-from getter_setter import orient, select, random_backbone, get_basis, clone_chain, find_clash
+from getter_setter import orient, select, random_backbone, get_basis, \
+    clone_chain, first_order_clash, get_rot_mat, find_clash
 
 
 # these define the residues whose coordinates are used to build interal
 # axes for each chain
-center_res = 1
-axis_res = 1
-radial_res = 1
-threshold = 0.36
-
+center_res = 20
+axis_res = 13
+radial_res = 24
+threshold = 0.8
 chain = 'A'
 
 
-coordinates, info_table = import_pdb('5X29.pdb')
+coordinates, info_table = import_pdb('5x29_S2E_completed.pdb')
 center_sn = select(info_table, res_num=center_res,
                    chain=chain, atom_name='CA')[0]
 axis_sn = select(info_table, res_num=axis_res, chain=chain, atom_name='C')[0]
@@ -60,13 +60,16 @@ for ch in query_chains:
     query_radial_sns.append(r)
     query_basis.append(get_basis(query_struct, c, a, r))
 
+
 # the average of all the atoms defining the center points of each chain
 symmetry_center = vector(np.mean(np.asarray(center_pts), axis=0))
 
-
 group_basis = np.mean(np.asarray(query_basis), axis=0)
-symmetry_axis = group_basis[0, :3].view(vector).unitize()
+# assert np.allclose(group_basis[:3, :3].T @ group_basis[:3, :3],
+#                    np.eye(3)), 'basis system is not orthonormal!'
 
+symmetry_axis = group_basis[0, :3].view(vector).unitize()
+# print('symmetry_axis: ', symmetry_axis)
 # The radial vector for the group basis is somewhat arbitrary since with radial
 # perfect symmetry it would average to the 0 vector. So it is assigned the
 # coordinates that point from the group center towards the CENTER ATOM first subunit of
@@ -80,9 +83,7 @@ else:
     radial_axis = query_struct[query_axis_sns[0]].project_onto_normal_plane(
         symmetry_axis).unitize()
 
-
 norm_axis = np.cross(symmetry_axis, radial_axis).view(vector)
-
 
 # find the average distance of the center coordinate of each chain from the
 # center of the group
@@ -102,18 +103,16 @@ local_basis_for_query = np.vstack(
      query_basis[0][2, :3] + query_basis[0][:3, 3].T))
 
 
-randomized, info_table = random_backbone(coordinates, info_table, 'test_residues.txt',
+# !!! UNCOMMENT TO SCRAMBLE THE BACKBONE ON THE LOOPS
+randomized, info_table = random_backbone(coordinates, info_table, 'residues.txt',
                                          cutoff_distance=threshold)
 
-
-oriented = orient(randomized, center_sn, axis_sn, radial_sn, query_struct,
+oriented = orient(coordinates, center_sn, axis_sn, radial_sn, query_struct,
                   target_center_sn=query_center_sns[0],
                   target_radial_sn=query_radial_sns[0],
                   target_axis_sn=query_axis_sns[0])
 
 # make n-1 new identical chains of your oriented chain
-
-
 for i in range(multiplicity-1):
     oriented, info_table, _ = clone_chain(
         oriented, info_table, [chain])
@@ -146,10 +145,23 @@ for i, ch in enumerate(set([info_table[x]['chain'] for x in range(len(oriented))
 
 oriented = oriented + symmetry_center
 
-while find_clash(coordinates, threshold):
-    print('redoing it')
-    randomized, info_table = random_backbone(coordinates, info_table, 'test_residues.txt',
-                                             cutoff_distance=0.36)
+
+# def inter_residue_clash(coords, threshold):
+#     is_clash = find_clash(coordinates, threshold)
+#     tf = False
+#     if is_clash:
+#         for pair in is_clash:
+#             if info_table(pair[0]).res_num != info_table(pair[1]).res_num:
+#                 tf = True
+#     return tf
+
+# a list of all unique atoms names eg: ['CA', 'CB', 'N' ...] found among all residues
+# atom_names = list(set(entry['atom_name'] for entry in info_table))
+
+# while first_order_clash(oriented, info_table, threshold, ['CA', 'C', 'O']):
+while find_clash(oriented, threshold):
+    randomized, info_table = random_backbone(coordinates, info_table, 'residues.txt',
+                                             cutoff_distance=threshold)
 
     oriented = orient(randomized, center_sn, axis_sn, radial_sn, query_struct,
                       target_center_sn=query_center_sns[0],
@@ -161,6 +173,7 @@ while find_clash(coordinates, threshold):
     for i in range(multiplicity-1):
         oriented, info_table, _ = clone_chain(
             oriented, info_table, [chain])
+        print(len(oriented), len(info_table))
 
     center_sns = select(info_table, res_num=center_res, atom_name='CA')
 
@@ -188,5 +201,15 @@ while find_clash(coordinates, threshold):
 
     oriented = oriented + symmetry_center
 
+# # align it so that the symmetry axis alignes with the +z axis and the
+# # center is at the origin
+# oriented = oriented - symmetry_center
+norm_v = np.cross(symmetry_axis, vector([0, 0, 1])).view(vector)
 
-write_pdb(oriented, info_table, 'test_structs/randomized')
+alignment_angle = symmetry_axis.angle_between(vector([0, 0, 1]))
+
+
+for sn in range(len(oriented)):
+    oriented[sn] = oriented[sn].rotate_arround(-alignment_angle, norm_v)
+
+# write_pdb(oriented, info_table, 'test_structs/randomized_5X29/randomized_5X29')
